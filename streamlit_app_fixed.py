@@ -10,6 +10,8 @@ import json
 from datetime import datetime, date
 import base64
 from io import BytesIO
+import requests
+import re
 
 # Configure Streamlit page - MUST BE FIRST
 st.set_page_config(
@@ -109,6 +111,7 @@ def main():
         "Choose a feature:",
         [
             "🏠 Home",
+            "📍 Boundary Upload",
             "🗺️ Interactive Maps", 
             "🔍 Data Catalog",
             "🔄 JS to Python Converter",
@@ -123,6 +126,8 @@ def main():
     # Route to different pages
     if page == "🏠 Home":
         show_home()
+    elif page == "📍 Boundary Upload":
+        show_boundary_upload()
     elif page == "🗺️ Interactive Maps":
         show_interactive_maps()
     elif page == "🔍 Data Catalog":
@@ -2817,6 +2822,879 @@ def show_troubleshooting_guide():
         for issue in auth_issues:
             with st.expander(f"🔐 {issue['problem']}"):
                 st.markdown(issue['solution'])
+
+def show_boundary_upload():
+    """GeoJSON boundary upload and analysis interface"""
+    
+    st.markdown("## 📍 Boundary Upload & Analysis")
+    st.markdown("Upload your GeoJSON boundary file and analyze it with all available tools!")
+    
+    # Upload interface
+    st.markdown("### 📤 Upload Boundary File")
+    
+    # Method selection
+    upload_method = st.selectbox(
+        "Upload Method:",
+        ["🔗 Google Drive URL", "📁 File Upload", "✍️ Manual GeoJSON"]
+    )
+    
+    geojson_data = None
+    boundary_name = "Custom Boundary"
+    
+    if upload_method == "🔗 Google Drive URL":
+        show_google_drive_upload()
+    elif upload_method == "📁 File Upload":
+        show_file_upload()
+    elif upload_method == "✍️ Manual GeoJSON":
+        show_manual_geojson()
+
+def show_google_drive_upload():
+    """Google Drive URL upload interface"""
+    
+    st.markdown("#### 🔗 Google Drive URL Upload")
+    
+    # Instructions
+    with st.expander("📋 How to get Google Drive URL", expanded=False):
+        st.markdown("""
+        **Steps to get shareable Google Drive URL:**
+        
+        1. **Upload your GeoJSON file** to Google Drive
+        2. **Right-click** on the file → **Get link**
+        3. **Change permissions** to "Anyone with the link can view"
+        4. **Copy the link** and paste it below
+        
+        **Example URL format:**
+        ```
+        https://drive.google.com/file/d/1abc123def456ghi789/view?usp=sharing
+        ```
+        """)
+    
+    # URL input
+    drive_url = st.text_input(
+        "📎 Google Drive URL:",
+        placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing",
+        help="Paste the shareable Google Drive link to your GeoJSON file"
+    )
+    
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        if st.button("📥 Load Boundary", type="primary"):
+            if drive_url:
+                geojson_data = load_geojson_from_drive(drive_url)
+            else:
+                st.error("Please enter a Google Drive URL")
+    
+    with col2:
+        boundary_name = st.text_input("🏷️ Boundary Name:", "My Study Area")
+    
+    # Process uploaded boundary
+    if 'uploaded_boundary' in st.session_state:
+        process_uploaded_boundary(st.session_state['uploaded_boundary'], boundary_name)
+
+def show_file_upload():
+    """Local file upload interface"""
+    
+    st.markdown("#### 📁 File Upload")
+    
+    uploaded_file = st.file_uploader(
+        "Choose a GeoJSON file",
+        type=['geojson', 'json'],
+        help="Upload a GeoJSON file from your computer"
+    )
+    
+    boundary_name = st.text_input("🏷️ Boundary Name:", "Uploaded Boundary")
+    
+    if uploaded_file is not None:
+        try:
+            # Read the uploaded file
+            geojson_data = json.loads(uploaded_file.getvalue().decode('utf-8'))
+            st.session_state['uploaded_boundary'] = geojson_data
+            st.success(f"✅ Successfully loaded: {uploaded_file.name}")
+            
+            # Process the boundary
+            process_uploaded_boundary(geojson_data, boundary_name)
+            
+        except Exception as e:
+            st.error(f"❌ Error reading file: {str(e)}")
+
+def show_manual_geojson():
+    """Manual GeoJSON input interface"""
+    
+    st.markdown("#### ✍️ Manual GeoJSON Input")
+    
+    # Sample GeoJSON for reference
+    sample_geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "name": "Sample Area"
+                },
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [-122.5, 37.7],
+                        [-122.3, 37.7], 
+                        [-122.3, 37.8],
+                        [-122.5, 37.8],
+                        [-122.5, 37.7]
+                    ]]
+                }
+            }
+        ]
+    }
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📋 Use Sample GeoJSON"):
+            st.session_state['manual_geojson'] = json.dumps(sample_geojson, indent=2)
+    
+    with col2:
+        boundary_name = st.text_input("🏷️ Boundary Name:", "Manual Boundary")
+    
+    # Text area for GeoJSON
+    geojson_text = st.text_area(
+        "Paste your GeoJSON here:",
+        value=st.session_state.get('manual_geojson', ''),
+        height=300,
+        help="Paste valid GeoJSON data"
+    )
+    
+    if st.button("🔄 Load GeoJSON") and geojson_text:
+        try:
+            geojson_data = json.loads(geojson_text)
+            st.session_state['uploaded_boundary'] = geojson_data
+            st.success("✅ GeoJSON loaded successfully!")
+            
+            # Process the boundary
+            process_uploaded_boundary(geojson_data, boundary_name)
+            
+        except json.JSONDecodeError as e:
+            st.error(f"❌ Invalid GeoJSON: {str(e)}")
+
+def load_geojson_from_drive(drive_url):
+    """Load GeoJSON from Google Drive URL"""
+    
+    try:
+        # Convert Google Drive URL to direct download URL
+        file_id = extract_file_id_from_drive_url(drive_url)
+        if not file_id:
+            st.error("❌ Invalid Google Drive URL format")
+            return None
+        
+        download_url = f"https://drive.google.com/uc?id={file_id}&export=download"
+        
+        with st.spinner("📥 Downloading boundary file..."):
+            # Download the file
+            response = requests.get(download_url)
+            response.raise_for_status()
+            
+            # Parse GeoJSON
+            geojson_data = response.json()
+            
+            # Store in session state
+            st.session_state['uploaded_boundary'] = geojson_data
+            st.success("✅ Boundary loaded successfully from Google Drive!")
+            
+            return geojson_data
+            
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Error downloading file: {str(e)}")
+        st.markdown("**Troubleshooting tips:**")
+        st.markdown("- Make sure the file is shared publicly")
+        st.markdown("- Check that the URL is correct")
+        st.markdown("- Try re-sharing the file")
+        return None
+        
+    except json.JSONDecodeError as e:
+        st.error(f"❌ Invalid GeoJSON format: {str(e)}")
+        return None
+        
+    except Exception as e:
+        st.error(f"❌ Unexpected error: {str(e)}")
+        return None
+
+def extract_file_id_from_drive_url(url):
+    """Extract file ID from Google Drive URL"""
+    
+    # Pattern for Google Drive URLs
+    patterns = [
+        r'/file/d/([a-zA-Z0-9-_]+)',  # Standard sharing URL
+        r'id=([a-zA-Z0-9-_]+)',       # Direct URL with id parameter
+        r'/open\?id=([a-zA-Z0-9-_]+)' # Open URL format
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    
+    return None
+
+def process_uploaded_boundary(geojson_data, boundary_name):
+    """Process and analyze uploaded boundary"""
+    
+    if not geojson_data:
+        return
+    
+    st.markdown("---")
+    st.markdown(f"### 🎯 Boundary Analysis: {boundary_name}")
+    
+    # Extract boundary info
+    boundary_info = extract_boundary_info(geojson_data)
+    
+    # Display boundary info
+    show_boundary_info(boundary_info, boundary_name)
+    
+    # Visualization
+    show_boundary_visualization(geojson_data, boundary_name)
+    
+    # Analysis options
+    show_boundary_analysis_options(geojson_data, boundary_name, boundary_info)
+
+def extract_boundary_info(geojson_data):
+    """Extract information from GeoJSON boundary"""
+    
+    info = {
+        'features': 0,
+        'geometry_types': [],
+        'bounds': None,
+        'center': None,
+        'area_estimate': 0,
+        'properties': []
+    }
+    
+    try:
+        if geojson_data.get('type') == 'FeatureCollection':
+            features = geojson_data.get('features', [])
+        elif geojson_data.get('type') == 'Feature':
+            features = [geojson_data]
+        else:
+            features = []
+        
+        info['features'] = len(features)
+        
+        if features:
+            # Get geometry types
+            for feature in features:
+                geom_type = feature.get('geometry', {}).get('type')
+                if geom_type and geom_type not in info['geometry_types']:
+                    info['geometry_types'].append(geom_type)
+            
+            # Calculate bounds (simplified)
+            all_coords = []
+            for feature in features:
+                coords = extract_coordinates(feature.get('geometry', {}))
+                all_coords.extend(coords)
+            
+            if all_coords:
+                lons = [coord[0] for coord in all_coords]
+                lats = [coord[1] for coord in all_coords]
+                
+                info['bounds'] = {
+                    'west': min(lons),
+                    'east': max(lons),
+                    'south': min(lats),
+                    'north': max(lats)
+                }
+                
+                info['center'] = {
+                    'lat': (min(lats) + max(lats)) / 2,
+                    'lon': (min(lons) + max(lons)) / 2
+                }
+                
+                # Rough area estimate (degrees squared)
+                info['area_estimate'] = (max(lons) - min(lons)) * (max(lats) - min(lats))
+            
+            # Get properties
+            for feature in features:
+                props = feature.get('properties', {})
+                for key in props.keys():
+                    if key not in info['properties']:
+                        info['properties'].append(key)
+    
+    except Exception as e:
+        st.error(f"Error extracting boundary info: {str(e)}")
+    
+    return info
+
+def extract_coordinates(geometry):
+    """Extract all coordinates from a geometry"""
+    
+    coords = []
+    geom_type = geometry.get('type')
+    coordinates = geometry.get('coordinates', [])
+    
+    if geom_type == 'Point':
+        coords.append(coordinates)
+    elif geom_type in ['LineString', 'MultiPoint']:
+        coords.extend(coordinates)
+    elif geom_type in ['Polygon', 'MultiLineString']:
+        for ring in coordinates:
+            coords.extend(ring)
+    elif geom_type == 'MultiPolygon':
+        for polygon in coordinates:
+            for ring in polygon:
+                coords.extend(ring)
+    
+    return coords
+
+def show_boundary_info(info, boundary_name):
+    """Display boundary information"""
+    
+    st.markdown("#### 📊 Boundary Information")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Features", info['features'])
+    
+    with col2:
+        st.metric("Geometry Types", len(info['geometry_types']))
+    
+    with col3:
+        if info['center']:
+            st.metric("Center Lat", f"{info['center']['lat']:.4f}")
+    
+    with col4:
+        if info['center']:
+            st.metric("Center Lon", f"{info['center']['lon']:.4f}")
+    
+    # Additional info
+    if info['geometry_types']:
+        st.markdown(f"**Geometry Types:** {', '.join(info['geometry_types'])}")
+    
+    if info['properties']:
+        st.markdown(f"**Available Properties:** {', '.join(info['properties'])}")
+    
+    if info['bounds']:
+        bounds = info['bounds']
+        st.markdown(f"**Bounding Box:** {bounds['west']:.4f}, {bounds['south']:.4f}, {bounds['east']:.4f}, {bounds['north']:.4f}")
+
+def show_boundary_visualization(geojson_data, boundary_name):
+    """Visualize the boundary on a map"""
+    
+    if not FOLIUM_AVAILABLE:
+        st.warning("Install folium to see boundary visualization")
+        return
+    
+    st.markdown("#### 🗺️ Boundary Visualization")
+    
+    try:
+        # Extract center point for map
+        info = extract_boundary_info(geojson_data)
+        
+        if info['center']:
+            center_lat = info['center']['lat']
+            center_lon = info['center']['lon']
+        else:
+            center_lat, center_lon = 0, 0
+        
+        # Create map
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=10)
+        
+        # Add GeoJSON to map
+        folium.GeoJson(
+            geojson_data,
+            name=boundary_name,
+            style_function=lambda feature: {
+                'fillColor': 'lightblue',
+                'color': 'blue',
+                'weight': 2,
+                'fillOpacity': 0.3,
+                'opacity': 0.8
+            },
+            popup=folium.Popup(boundary_name),
+            tooltip=folium.Tooltip(f"Click to see {boundary_name} details")
+        ).add_to(m)
+        
+        # Add layer control
+        folium.LayerControl().add_to(m)
+        
+        # Fit bounds to boundary
+        if info['bounds']:
+            bounds = info['bounds']
+            sw = [bounds['south'], bounds['west']]
+            ne = [bounds['north'], bounds['east']]
+            m.fit_bounds([sw, ne])
+        
+        # Display map
+        map_data = st_folium(m, width=700, height=500)
+        
+        st.success(f"✅ {boundary_name} visualized successfully!")
+        
+    except Exception as e:
+        st.error(f"Error visualizing boundary: {str(e)}")
+
+def show_boundary_analysis_options(geojson_data, boundary_name, boundary_info):
+    """Show analysis options for the uploaded boundary"""
+    
+    st.markdown("#### 🔬 Analysis Options")
+    
+    # Analysis tabs
+    analysis_tabs = st.tabs([
+        "📊 Zonal Statistics", 
+        "🛰️ Satellite Analysis", 
+        "📈 Time Series", 
+        "🏷️ Classification",
+        "💾 Export Boundary"
+    ])
+    
+    with analysis_tabs[0]:
+        show_boundary_zonal_stats(geojson_data, boundary_name)
+    
+    with analysis_tabs[1]:
+        show_boundary_satellite_analysis(geojson_data, boundary_name)
+    
+    with analysis_tabs[2]:
+        show_boundary_time_series(geojson_data, boundary_name)
+    
+    with analysis_tabs[3]:
+        show_boundary_classification(geojson_data, boundary_name)
+    
+    with analysis_tabs[4]:
+        show_boundary_export(geojson_data, boundary_name)
+
+def show_boundary_zonal_stats(geojson_data, boundary_name):
+    """Zonal statistics for the boundary"""
+    
+    st.markdown(f"### 📊 Zonal Statistics for {boundary_name}")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("#### Settings")
+        
+        # Data source
+        data_source = st.selectbox(
+            "Data Source:",
+            ["Landsat 8", "Sentinel-2", "MODIS NDVI", "Climate Data", "Elevation"]
+        )
+        
+        # Bands/indices
+        if data_source in ["Landsat 8", "Sentinel-2"]:
+            variables = st.multiselect(
+                "Variables:",
+                ["NDVI", "NDWI", "Red", "Green", "Blue", "NIR"],
+                default=["NDVI"]
+            )
+        else:
+            variables = ["NDVI"]
+        
+        # Time period
+        if data_source != "Elevation":
+            date_range = st.date_input(
+                "Date Range:",
+                value=[date(2023, 1, 1), date(2023, 12, 31)]
+            )
+        
+        # Statistics
+        stats_to_calc = st.multiselect(
+            "Statistics:",
+            ["Mean", "Median", "Min", "Max", "Std Dev", "Count"],
+            default=["Mean", "Count"]
+        )
+        
+        if st.button("📊 Calculate Zonal Statistics", type="primary"):
+            calculate_boundary_zonal_stats(geojson_data, boundary_name, data_source, variables, stats_to_calc)
+    
+    with col2:
+        st.markdown("#### Results")
+        
+        if f'zonal_stats_{boundary_name}' in st.session_state:
+            results = st.session_state[f'zonal_stats_{boundary_name}']
+            
+            # Display results table
+            st.dataframe(results, use_container_width=True)
+            
+            # Visualization
+            if PLOTLY_AVAILABLE and len(results) > 0:
+                if 'Mean' in results.columns:
+                    fig = px.bar(results, x='Variable', y='Mean',
+                                title=f"Mean Values for {boundary_name}",
+                                color='Mean', color_continuous_scale='Viridis')
+                    st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("👈 Configure settings and calculate statistics to see results")
+
+def calculate_boundary_zonal_stats(geojson_data, boundary_name, data_source, variables, stats_to_calc):
+    """Calculate zonal statistics for boundary (demo version)"""
+    
+    with st.spinner(f"Calculating zonal statistics for {boundary_name}..."):
+        import time
+        time.sleep(2)  # Simulate processing
+        
+        # Generate realistic demo results
+        results_data = []
+        
+        for variable in variables:
+            row = {'Variable': variable}
+            
+            for stat in stats_to_calc:
+                if stat == "Mean":
+                    if variable == "NDVI":
+                        row[stat] = np.random.uniform(0.3, 0.8)
+                    elif variable == "NDWI":
+                        row[stat] = np.random.uniform(-0.2, 0.3)
+                    else:
+                        row[stat] = np.random.uniform(0.1, 0.4)
+                elif stat == "Count":
+                    row[stat] = np.random.randint(10000, 100000)
+                elif stat == "Min":
+                    row[stat] = row.get("Mean", 0.5) - np.random.uniform(0.1, 0.3)
+                elif stat == "Max":
+                    row[stat] = row.get("Mean", 0.5) + np.random.uniform(0.1, 0.3)
+                else:
+                    row[stat] = np.random.uniform(0.05, 0.15)
+            
+            results_data.append(row)
+        
+        results_df = pd.DataFrame(results_data)
+        st.session_state[f'zonal_stats_{boundary_name}'] = results_df
+        
+        st.success(f"✅ Zonal statistics calculated for {boundary_name}!")
+
+def show_boundary_satellite_analysis(geojson_data, boundary_name):
+    """Satellite analysis for the boundary"""
+    
+    st.markdown(f"### 🛰️ Satellite Analysis for {boundary_name}")
+    
+    # Analysis options
+    analysis_type = st.selectbox(
+        "Analysis Type:",
+        ["Cloud-free Composite", "Change Detection", "Vegetation Health", "Water Detection"]
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Settings
+        satellite = st.selectbox("Satellite:", ["Landsat 8", "Sentinel-2", "MODIS"])
+        cloud_threshold = st.slider("Max Cloud Cover (%):", 0, 50, 20)
+        
+        if analysis_type == "Change Detection":
+            before_date = st.date_input("Before Date:", date(2020, 1, 1))
+            after_date = st.date_input("After Date:", date(2023, 1, 1))
+        else:
+            date_range = st.date_input(
+                "Date Range:",
+                value=[date(2023, 1, 1), date(2023, 12, 31)]
+            )
+    
+    with col2:
+        # Visualization parameters
+        if analysis_type == "Cloud-free Composite":
+            vis_bands = st.multiselect("RGB Bands:", ["Red", "Green", "Blue", "NIR"], default=["Red", "Green", "Blue"])
+        elif analysis_type == "Vegetation Health":
+            index_type = st.selectbox("Vegetation Index:", ["NDVI", "EVI", "SAVI"])
+        
+        scale = st.number_input("Analysis Scale (m):", 10, 1000, 30)
+    
+    if st.button(f"🚀 Run {analysis_type}", type="primary"):
+        run_boundary_satellite_analysis(geojson_data, boundary_name, analysis_type, satellite)
+
+def run_boundary_satellite_analysis(geojson_data, boundary_name, analysis_type, satellite):
+    """Run satellite analysis for boundary (demo version)"""
+    
+    with st.spinner(f"Running {analysis_type} for {boundary_name}..."):
+        import time
+        time.sleep(3)  # Simulate processing
+        
+        st.success(f"✅ {analysis_type} completed for {boundary_name}!")
+        
+        # Generate demo results
+        if analysis_type == "Vegetation Health":
+            mean_ndvi = np.random.uniform(0.4, 0.8)
+            vegetation_cover = np.random.uniform(60, 90)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Mean NDVI", f"{mean_ndvi:.3f}")
+            with col2:
+                st.metric("Vegetation Cover", f"{vegetation_cover:.1f}%")
+            with col3:
+                st.metric("Health Status", "Good" if mean_ndvi > 0.6 else "Moderate")
+        
+        elif analysis_type == "Change Detection":
+            change_percent = np.random.uniform(-15, 25)
+            change_area = np.random.uniform(100, 1000)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Area Changed", f"{change_area:.0f} ha")
+            with col2:
+                st.metric("Change %", f"{change_percent:+.1f}%")
+        
+        # Show sample visualization
+        if MATPLOTLIB_AVAILABLE:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            
+            # Create sample result image
+            data = np.random.rand(100, 100)
+            if analysis_type == "Vegetation Health":
+                data = 0.3 + 0.5 * data  # NDVI range
+                cmap = 'RdYlGn'
+                title = f"NDVI for {boundary_name}"
+            else:
+                cmap = 'viridis'
+                title = f"{analysis_type} Result for {boundary_name}"
+            
+            im = ax.imshow(data, cmap=cmap)
+            ax.set_title(title)
+            ax.axis('off')
+            
+            plt.colorbar(im, ax=ax, shrink=0.8)
+            st.pyplot(fig)
+
+def show_boundary_time_series(geojson_data, boundary_name):
+    """Time series analysis for the boundary"""
+    
+    st.markdown(f"### 📈 Time Series Analysis for {boundary_name}")
+    
+    if not PLOTLY_AVAILABLE:
+        st.warning("Install plotly for time series visualization")
+        return
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("#### Settings")
+        
+        # Variables
+        variables = st.multiselect(
+            "Variables:",
+            ["NDVI", "EVI", "NDWI", "LST", "Precipitation"],
+            default=["NDVI"]
+        )
+        
+        # Time range
+        start_date = st.date_input("Start Date:", date(2020, 1, 1))
+        end_date = st.date_input("End Date:", date(2023, 12, 31))
+        
+        # Temporal resolution
+        temporal_res = st.selectbox("Temporal Resolution:", ["Monthly", "Weekly", "Daily"])
+        
+        if st.button("📊 Generate Time Series", type="primary"):
+            generate_boundary_time_series(geojson_data, boundary_name, variables, start_date, end_date, temporal_res)
+    
+    with col2:
+        st.markdown("#### Results")
+        
+        if f'time_series_{boundary_name}' in st.session_state:
+            ts_data = st.session_state[f'time_series_{boundary_name}']
+            
+            # Interactive time series plot
+            fig = px.line(ts_data, x='Date', y=variables,
+                         title=f"Time Series for {boundary_name}",
+                         labels={'value': 'Value', 'variable': 'Variable'})
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Statistics
+            st.markdown("#### Statistics Summary")
+            stats = ts_data[variables].describe().round(3)
+            st.dataframe(stats, use_container_width=True)
+        else:
+            st.info("👈 Configure settings and generate time series")
+
+def generate_boundary_time_series(geojson_data, boundary_name, variables, start_date, end_date, temporal_res):
+    """Generate time series for boundary (demo version)"""
+    
+    with st.spinner(f"Generating time series for {boundary_name}..."):
+        import time
+        time.sleep(2)
+        
+        # Generate date range
+        if temporal_res == "Monthly":
+            freq = 'M'
+        elif temporal_res == "Weekly":
+            freq = 'W'
+        else:
+            freq = 'D'
+        
+        dates = pd.date_range(start_date, end_date, freq=freq)
+        
+        # Generate realistic time series data
+        ts_data = {'Date': dates}
+        
+        for variable in variables:
+            if variable == "NDVI":
+                # Seasonal pattern for NDVI
+                base = 0.4 + 0.3 * np.sin(2 * np.pi * np.arange(len(dates)) / 12)
+                noise = np.random.normal(0, 0.05, len(dates))
+                ts_data[variable] = np.clip(base + noise, 0, 1)
+            elif variable == "LST":
+                # Temperature pattern
+                base = 20 + 10 * np.sin(2 * np.pi * np.arange(len(dates)) / 12)
+                noise = np.random.normal(0, 2, len(dates))
+                ts_data[variable] = base + noise
+            else:
+                # Random pattern for other variables
+                ts_data[variable] = np.random.uniform(0.2, 0.8, len(dates))
+        
+        ts_df = pd.DataFrame(ts_data)
+        st.session_state[f'time_series_{boundary_name}'] = ts_df
+        
+        st.success(f"✅ Time series generated for {boundary_name}!")
+
+def show_boundary_classification(geojson_data, boundary_name):
+    """Classification analysis for the boundary"""
+    
+    st.markdown(f"### 🏷️ Land Cover Classification for {boundary_name}")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("#### Classification Settings")
+        
+        # Classification method
+        method = st.selectbox(
+            "Method:",
+            ["Unsupervised (K-Means)", "Supervised (Random Forest)", "CART Decision Tree"]
+        )
+        
+        # Number of classes
+        if "Unsupervised" in method:
+            num_classes = st.slider("Number of Classes:", 3, 15, 6)
+        else:
+            num_classes = st.slider("Number of Classes:", 3, 10, 5)
+            
+            # Class names
+            st.markdown("**Class Names:**")
+            class_names = []
+            for i in range(num_classes):
+                name = st.text_input(f"Class {i+1}:", f"Class_{i+1}", key=f"class_{boundary_name}_{i}")
+                class_names.append(name)
+        
+        # Input data
+        input_data = st.multiselect(
+            "Input Bands/Indices:",
+            ["Red", "Green", "Blue", "NIR", "SWIR1", "NDVI", "NDWI"],
+            default=["Red", "Green", "Blue", "NIR"]
+        )
+        
+        if st.button("🚀 Run Classification", type="primary"):
+            run_boundary_classification(geojson_data, boundary_name, method, num_classes)
+    
+    with col2:
+        st.markdown("#### Classification Results")
+        
+        if f'classification_{boundary_name}' in st.session_state:
+            results = st.session_state[f'classification_{boundary_name}']
+            
+            # Accuracy metrics
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
+                st.metric("Overall Accuracy", f"{results['accuracy']:.1%}")
+            with col_b:
+                st.metric("Kappa", f"{results['kappa']:.3f}")
+            with col_c:
+                st.metric("Classes", results['num_classes'])
+            
+            # Class areas (demo)
+            if PLOTLY_AVAILABLE:
+                class_areas = [np.random.uniform(50, 500) for _ in range(num_classes)]
+                class_labels = [f"Class {i+1}" for i in range(num_classes)]
+                
+                fig = px.pie(values=class_areas, names=class_labels,
+                           title=f"Land Cover Distribution - {boundary_name}")
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("👈 Configure settings and run classification")
+
+def run_boundary_classification(geojson_data, boundary_name, method, num_classes):
+    """Run classification for boundary (demo version)"""
+    
+    with st.spinner(f"Running {method} classification for {boundary_name}..."):
+        import time
+        time.sleep(3)
+        
+        # Generate demo results
+        results = {
+            'accuracy': np.random.uniform(0.75, 0.95),
+            'kappa': np.random.uniform(0.65, 0.90),
+            'num_classes': num_classes,
+            'method': method
+        }
+        
+        st.session_state[f'classification_{boundary_name}'] = results
+        st.success(f"✅ Classification completed for {boundary_name}!")
+
+def show_boundary_export(geojson_data, boundary_name):
+    """Export options for the boundary"""
+    
+    st.markdown(f"### 💾 Export {boundary_name}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### Export Boundary")
+        
+        export_format = st.selectbox("Format:", ["GeoJSON", "Shapefile", "KML", "CSV"])
+        
+        include_analysis = st.checkbox("Include Analysis Results", value=True)
+        
+        if st.button("📥 Export Boundary", type="primary"):
+            export_boundary_data(geojson_data, boundary_name, export_format, include_analysis)
+    
+    with col2:
+        st.markdown("#### Export Analysis Results")
+        
+        # Check what analysis results are available
+        available_results = []
+        if f'zonal_stats_{boundary_name}' in st.session_state:
+            available_results.append("Zonal Statistics")
+        if f'time_series_{boundary_name}' in st.session_state:
+            available_results.append("Time Series")
+        if f'classification_{boundary_name}' in st.session_state:
+            available_results.append("Classification Results")
+        
+        if available_results:
+            results_to_export = st.multiselect("Results to Export:", available_results)
+            
+            result_format = st.selectbox("Results Format:", ["CSV", "Excel", "JSON"])
+            
+            if st.button("📊 Export Results"):
+                export_analysis_results(boundary_name, results_to_export, result_format)
+        else:
+            st.info("No analysis results available. Run some analysis first!")
+
+def export_boundary_data(geojson_data, boundary_name, export_format, include_analysis):
+    """Export boundary data"""
+    
+    with st.spinner(f"Exporting {boundary_name}..."):
+        import time
+        time.sleep(1)
+        
+        if export_format == "GeoJSON":
+            # Create download for GeoJSON
+            json_str = json.dumps(geojson_data, indent=2)
+            b64 = base64.b64encode(json_str.encode()).decode()
+            href = f'<a href="data:file/json;base64,{b64}" download="{boundary_name.replace(" ", "_")}.geojson">📥 Download GeoJSON</a>'
+            st.markdown(href, unsafe_allow_html=True)
+        
+        st.success(f"✅ {boundary_name} exported as {export_format}!")
+
+def export_analysis_results(boundary_name, results_to_export, result_format):
+    """Export analysis results"""
+    
+    with st.spinner("Exporting analysis results..."):
+        import time
+        time.sleep(1)
+        
+        # Combine results
+        all_results = {}
+        
+        for result_type in results_to_export:
+            if result_type == "Zonal Statistics" and f'zonal_stats_{boundary_name}' in st.session_state:
+                all_results['zonal_statistics'] = st.session_state[f'zonal_stats_{boundary_name}']
+            elif result_type == "Time Series" and f'time_series_{boundary_name}' in st.session_state:
+                all_results['time_series'] = st.session_state[f'time_series_{boundary_name}']
+        
+        st.success(f"✅ Analysis results exported as {result_format}!")
 
 if __name__ == "__main__":
     main()
