@@ -6,6 +6,16 @@ accessible through a user-friendly web application.
 """
 
 import streamlit as st
+
+# Configure Streamlit page - MUST BE FIRST STREAMLIT COMMAND
+st.set_page_config(
+    page_title="GeoMasterPy - Interactive Earth Engine Tool",
+    page_icon="🌍",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Now import other modules
 import pandas as pd
 import numpy as np
 import json
@@ -13,13 +23,12 @@ from datetime import datetime, date
 import base64
 from io import BytesIO
 
-# Import with error handling
+# Import with error handling - NO st.error() calls here since st.set_page_config must be first
 try:
     import matplotlib.pyplot as plt
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    st.error("Matplotlib not available")
 
 try:
     import plotly.express as px
@@ -28,7 +37,6 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError as e:
     PLOTLY_AVAILABLE = False
-    st.error(f"Plotly not available: {e}")
 
 try:
     import folium
@@ -36,7 +44,6 @@ try:
     FOLIUM_AVAILABLE = True
 except ImportError:
     FOLIUM_AVAILABLE = False
-    st.error("Folium not available")
 
 # Import GeoMasterPy components (with fallbacks for demo mode)
 try:
@@ -44,14 +51,12 @@ try:
     GEOMASTERPY_AVAILABLE = True
 except ImportError as e:
     GEOMASTERPY_AVAILABLE = False
-    print(f"GeoMasterPy not available: {e}")
 
 try:
     import ee
     EE_AVAILABLE = True
 except ImportError as e:
     EE_AVAILABLE = False
-    print(f"Earth Engine not available: {e}")
 
 # Handle optional heavy dependencies gracefully
 try:
@@ -65,14 +70,6 @@ try:
     IPYLEAFLET_AVAILABLE = True
 except ImportError:
     IPYLEAFLET_AVAILABLE = False
-
-# Configure Streamlit page
-st.set_page_config(
-    page_title="GeoMasterPy - Interactive Earth Engine Tool",
-    page_icon="🌍",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS
 st.markdown("""
@@ -109,6 +106,23 @@ def main():
     st.markdown('<h1 class="main-header">🌍 GeoMasterPy Interactive</h1>', unsafe_allow_html=True)
     st.markdown("**Interactive Geospatial Analysis with Google Earth Engine**")
     
+    # Show requirements info
+    if not PLOTLY_AVAILABLE or not FOLIUM_AVAILABLE:
+        st.warning("⚠️ Missing dependencies detected. Check requirements file.")
+        with st.expander("📋 Requirements Debug Info"):
+            st.code("""
+# Try these requirements files on Streamlit Cloud:
+
+Option 1 (Basic - Guaranteed):
+requirements_basic.txt
+
+Option 2 (Standard):  
+requirements_streamlit.txt
+
+Option 3 (Minimal):
+requirements_minimal.txt
+            """)
+    
     # Check system status
     with st.expander("🔧 System Status", expanded=True):
         col1, col2, col3, col4 = st.columns(4)
@@ -118,12 +132,14 @@ def main():
                 st.success("✅ Plotly")
             else:
                 st.error("❌ Plotly Missing")
+                st.caption("Run: pip install plotly")
         
         with col2:
             if FOLIUM_AVAILABLE:
                 st.success("✅ Folium")
             else:
                 st.error("❌ Folium Missing")
+                st.caption("Run: pip install folium streamlit-folium")
         
         with col3:
             if MATPLOTLIB_AVAILABLE:

@@ -1,0 +1,7 @@
+# MINIMAL - Guaranteed to work on Streamlit Cloud
+streamlit
+plotly
+folium
+streamlit-folium
+pandas
+numpy
