@@ -8,16 +8,35 @@ accessible through a user-friendly web application.
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import folium
-from streamlit_folium import st_folium
 import json
 from datetime import datetime, date
 import base64
 from io import BytesIO
+
+# Import with error handling
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    st.error("Matplotlib not available")
+
+try:
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    PLOTLY_AVAILABLE = True
+except ImportError as e:
+    PLOTLY_AVAILABLE = False
+    st.error(f"Plotly not available: {e}")
+
+try:
+    import folium
+    from streamlit_folium import st_folium
+    FOLIUM_AVAILABLE = True
+except ImportError:
+    FOLIUM_AVAILABLE = False
+    st.error("Folium not available")
 
 # Import GeoMasterPy components (with fallbacks for demo mode)
 try:
@@ -91,16 +110,37 @@ def main():
     st.markdown("**Interactive Geospatial Analysis with Google Earth Engine**")
     
     # Check system status
-    with st.expander("🔧 System Status", expanded=False):
+    with st.expander("🔧 System Status", expanded=True):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
+            if PLOTLY_AVAILABLE:
+                st.success("✅ Plotly")
+            else:
+                st.error("❌ Plotly Missing")
+        
+        with col2:
+            if FOLIUM_AVAILABLE:
+                st.success("✅ Folium")
+            else:
+                st.error("❌ Folium Missing")
+        
+        with col3:
+            if MATPLOTLIB_AVAILABLE:
+                st.success("✅ Matplotlib")
+            else:
+                st.error("❌ Matplotlib Missing")
+        
+        with col4:
             if GEOMASTERPY_AVAILABLE:
                 st.success("✅ GeoMasterPy")
             else:
                 st.warning("⚠️ Demo Mode")
         
-        with col2:
+        # Second row for additional status
+        col5, col6, col7, col8 = st.columns(4)
+        
+        with col5:
             if EE_AVAILABLE:
                 try:
                     ee.Initialize()
@@ -110,17 +150,17 @@ def main():
                     st.warning("⚠️ EE Auth Needed")
                     ee_status = False
             else:
-                st.warning("⚠️ EE Offline")
+                st.info("ℹ️ EE Optional")
                 ee_status = False
         
-        with col3:
-            if CARTOPY_AVAILABLE:
-                st.success("✅ Cartopy")
-            else:
-                st.info("ℹ️ Cartopy Optional")
+        with col6:
+            st.success("✅ Streamlit")
         
-        with col4:
-            st.success("✅ Web App Ready")
+        with col7:
+            st.success("✅ Pandas")
+        
+        with col8:
+            st.success("✅ NumPy")
     
     # Sidebar navigation
     st.sidebar.title("🧭 Navigation")
@@ -660,10 +700,13 @@ def show_image_statistics():
             st.dataframe(df, use_container_width=True)
             
             # Visualization
-            fig = px.bar(df, x='Band', y=['Mean', 'Median'], 
-                        title="Band Statistics Comparison",
-                        barmode='group')
-            st.plotly_chart(fig, use_container_width=True)
+            if PLOTLY_AVAILABLE:
+                fig = px.bar(df, x='Band', y=['Mean', 'Median'], 
+                            title="Band Statistics Comparison",
+                            barmode='group')
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("⚠️ Plotly not available - visualization disabled")
         else:
             st.info("👈 Configure settings and click 'Calculate Statistics'")
 
