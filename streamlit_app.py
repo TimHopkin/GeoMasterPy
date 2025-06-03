@@ -184,6 +184,7 @@ requirements_minimal.txt
         "Choose a feature:",
         [
             "🏠 Home",
+            "📁 Area of Interest",
             "🗺️ Interactive Maps", 
             "🔍 Data Catalog",
             "🔄 JS to Python Converter",
@@ -198,6 +199,8 @@ requirements_minimal.txt
     # Route to different pages
     if page == "🏠 Home":
         show_home()
+    elif page == "📁 Area of Interest":
+        show_area_of_interest()
     elif page == "🗺️ Interactive Maps":
         show_interactive_maps()
     elif page == "🔍 Data Catalog":
@@ -289,8 +292,8 @@ def show_home():
     with col1:
         st.markdown("### For Beginners")
         st.markdown("""
-        1. 🔍 Start with **Data Catalog** to explore datasets
-        2. 🔄 Try the **JS Converter** to migrate existing code
+        1. 📁 Define your **Area of Interest** from Google Drive
+        2. 🔍 Start with **Data Catalog** to explore datasets
         3. 🗺️ Create your first **Interactive Map**
         4. 📊 Explore **Data Analysis** tools
         """)
@@ -298,10 +301,205 @@ def show_home():
     with col2:
         st.markdown("### For Advanced Users")
         st.markdown("""
-        1. 📊 Jump to **Data Analysis** for complex workflows
-        2. 🖼️ Create **Publication Maps** for research
-        3. 💾 Use **Export Tools** for data management
-        4. 📚 Check **Documentation** for API details
+        1. 📁 Upload **Area of Interest** boundary from Google Drive
+        2. 📊 Jump to **Data Analysis** for complex workflows
+        3. 🖼️ Create **Publication Maps** for research
+        4. 💾 Use **Export Tools** for data management
+        """)
+
+def show_area_of_interest():
+    """Area of Interest definition interface with Google Drive GeoJSON support"""
+    
+    st.markdown("## 📁 Define Your Area of Interest")
+    st.markdown("Load a GeoJSON file from Google Drive to define your study area for analysis.")
+    
+    # Instructions
+    with st.expander("📖 How to use Google Drive GeoJSON", expanded=False):
+        st.markdown("""
+        ### Steps to share a GeoJSON file from Google Drive:
+        
+        1. **Upload your GeoJSON file to Google Drive**
+        2. **Right-click the file** and select "Share"
+        3. **Change permissions** to "Anyone with the link can view"
+        4. **Copy the sharing link** and paste it below
+        
+        ### Supported URL formats:
+        - `https://drive.google.com/file/d/FILE_ID/view?usp=sharing`
+        - `https://drive.google.com/open?id=FILE_ID`
+        - `https://drive.google.com/uc?id=FILE_ID`
+        
+        ### Tips:
+        - Ensure your GeoJSON file is valid
+        - Keep file sizes reasonable (< 10MB recommended)
+        - Use simple geometries for better performance
+        """)
+    
+    # Google Drive URL input
+    st.markdown("### 🔗 Google Drive GeoJSON URL")
+    
+    # Session state for storing the loaded geometry
+    if 'aoi_geometry' not in st.session_state:
+        st.session_state.aoi_geometry = None
+    if 'aoi_geojson' not in st.session_state:
+        st.session_state.aoi_geojson = None
+    if 'aoi_name' not in st.session_state:
+        st.session_state.aoi_name = "Custom Area"
+    
+    # URL input
+    drive_url = st.text_input(
+        "Enter Google Drive sharing URL:",
+        placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing",
+        help="Paste the sharing URL of your GeoJSON file from Google Drive"
+    )
+    
+    # Optional: Area name
+    aoi_name = st.text_input(
+        "Area name (optional):",
+        value=st.session_state.aoi_name,
+        placeholder="e.g., My Study Area, Farm Boundary, etc."
+    )
+    
+    # Load button
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("🔄 Load GeoJSON", type="primary"):
+            if drive_url:
+                with st.spinner("Loading GeoJSON from Google Drive..."):
+                    try:
+                        # Validate URL first
+                        if not GEOMASTERPY_AVAILABLE:
+                            st.error("GeoMasterPy not available. Please check installation.")
+                        else:
+                            # Import the functions
+                            from geomasterpy.data.catalog import (
+                                validate_drive_url, 
+                                load_geojson_from_drive_url,
+                                geojson_to_ee_geometry
+                            )
+                            
+                            # Validate URL
+                            if not validate_drive_url(drive_url):
+                                st.error("Invalid Google Drive URL. Please check the format.")
+                            else:
+                                # Load GeoJSON
+                                geojson_data = load_geojson_from_drive_url(drive_url)
+                                
+                                if geojson_data:
+                                    # Store in session state
+                                    st.session_state.aoi_geojson = geojson_data
+                                    st.session_state.aoi_name = aoi_name if aoi_name else "Custom Area"
+                                    
+                                    # Convert to Earth Engine geometry if EE is available
+                                    if EE_AVAILABLE:
+                                        ee_geometry = geojson_to_ee_geometry(geojson_data)
+                                        st.session_state.aoi_geometry = ee_geometry
+                                    
+                                    st.success(f"✅ Successfully loaded GeoJSON: {st.session_state.aoi_name}")
+                                    
+                                else:
+                                    st.error("Failed to load GeoJSON. Please check the URL and file format.")
+                                    
+                    except Exception as e:
+                        st.error(f"Error loading GeoJSON: {str(e)}")
+            else:
+                st.warning("Please enter a Google Drive URL")
+    
+    with col2:
+        if st.button("🗑️ Clear Area"):
+            st.session_state.aoi_geometry = None
+            st.session_state.aoi_geojson = None
+            st.session_state.aoi_name = "Custom Area"
+            st.success("Area of interest cleared")
+    
+    # Display current area of interest
+    if st.session_state.aoi_geojson:
+        st.markdown("### 📍 Current Area of Interest")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.info(f"**Name:** {st.session_state.aoi_name}")
+            
+            # Display basic info about the GeoJSON
+            geojson_type = st.session_state.aoi_geojson.get('type', 'Unknown')
+            st.info(f"**Type:** {geojson_type}")
+            
+            if geojson_type == 'FeatureCollection':
+                num_features = len(st.session_state.aoi_geojson.get('features', []))
+                st.info(f"**Features:** {num_features}")
+            
+        with col2:
+            # Show options for using this AOI
+            st.markdown("**Use this area for:**")
+            if st.button("🗺️ View on Interactive Map"):
+                st.info("Navigate to '🗺️ Interactive Maps' to visualize your area")
+            if st.button("📊 Run Data Analysis"):
+                st.info("Navigate to '📊 Data Analysis' to analyze your area")
+            if st.button("💾 Export Data"):
+                st.info("Navigate to '💾 Export Tools' to export data from your area")
+        
+        # Display the GeoJSON on a map if Folium is available
+        if FOLIUM_AVAILABLE:
+            st.markdown("### 🌍 Area Preview")
+            
+            try:
+                import folium
+                import json
+                
+                # Create a simple folium map
+                # Calculate bounds from GeoJSON
+                if st.session_state.aoi_geojson['type'] == 'FeatureCollection':
+                    # Get first feature's coordinates for centering
+                    first_feature = st.session_state.aoi_geojson['features'][0]
+                    coords = first_feature['geometry']['coordinates']
+                else:
+                    coords = st.session_state.aoi_geojson['coordinates']
+                
+                # Create map centered on the area
+                m = folium.Map(location=[0, 0], zoom_start=2)
+                
+                # Add GeoJSON to map
+                folium.GeoJson(
+                    st.session_state.aoi_geojson,
+                    style_function=lambda x: {
+                        'fillColor': 'red',
+                        'color': 'red',
+                        'weight': 2,
+                        'fillOpacity': 0.3
+                    }
+                ).add_to(m)
+                
+                # Fit bounds to the geometry
+                geojson_layer = folium.GeoJson(st.session_state.aoi_geojson)
+                m.fit_bounds(geojson_layer.get_bounds())
+                
+                # Display map
+                st_folium(m, width=700, height=400)
+                
+            except Exception as e:
+                st.warning(f"Could not display map preview: {str(e)}")
+        
+        # Raw GeoJSON viewer (optional)
+        with st.expander("🔍 View Raw GeoJSON", expanded=False):
+            st.json(st.session_state.aoi_geojson)
+    
+    else:
+        st.markdown("### 📍 No Area of Interest Defined")
+        st.info("Load a GeoJSON file from Google Drive to define your study area.")
+        
+        # Show example without actual loading
+        st.markdown("### 📋 Example Analysis Workflow")
+        st.markdown("""
+        Once you load an area of interest, you can:
+        
+        1. **🗺️ Visualize** your area on interactive maps
+        2. **📊 Analyze** satellite data within your boundary
+        3. **📈 Create** time series charts and statistics
+        4. **💾 Export** results and processed data
+        5. **🖼️ Generate** publication-quality maps
+        
+        All analysis tools will automatically use your defined area as the region of interest.
         """)
 
 def show_interactive_maps():
@@ -648,6 +846,20 @@ def show_data_analysis():
     
     st.markdown("## 📊 Geospatial Data Analysis")
     
+    # Area of Interest status
+    if st.session_state.get('aoi_geometry') is not None:
+        st.success(f"✅ Using Area of Interest: **{st.session_state.get('aoi_name', 'Custom Area')}**")
+        st.info("All analysis will be focused on your defined area of interest.")
+    else:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.warning("⚠️ No Area of Interest defined. Analysis will use sample/default regions.")
+        with col2:
+            if st.button("📁 Load AOI"):
+                st.info("Navigate to '📁 Area of Interest' to load your study area")
+    
+    st.markdown("---")
+    
     # Analysis type selector
     analysis_type = st.selectbox(
         "Choose analysis type:",
@@ -682,6 +894,14 @@ def show_image_statistics():
     with col1:
         st.markdown("#### Settings")
         
+        # Region selection based on AOI availability
+        if st.session_state.get('aoi_geometry') is not None:
+            st.success(f"📍 Analysis region: {st.session_state.get('aoi_name', 'Custom Area')}")
+            use_aoi = True
+        else:
+            st.info("💡 Using sample coordinates. Load an Area of Interest for real analysis.")
+            use_aoi = False
+        
         dataset = st.selectbox(
             "Dataset:",
             ["Landsat 8", "Sentinel-2", "MODIS"]
@@ -695,18 +915,116 @@ def show_image_statistics():
         
         scale = st.number_input("Analysis scale (meters):", 10, 1000, 30)
         
+        # Date range for analysis
+        col_start, col_end = st.columns(2)
+        with col_start:
+            start_date = st.date_input("Start date:", datetime(2023, 1, 1).date())
+        with col_end:
+            end_date = st.date_input("End date:", datetime(2023, 12, 31).date())
+        
         if st.button("📊 Calculate Statistics"):
-            # Demo statistics
-            demo_stats = pd.DataFrame({
-                'Band': bands,
-                'Mean': np.random.uniform(0.1, 0.3, len(bands)),
-                'Std': np.random.uniform(0.05, 0.15, len(bands)),
-                'Min': np.random.uniform(0.0, 0.1, len(bands)),
-                'Max': np.random.uniform(0.4, 0.8, len(bands)),
-                'Median': np.random.uniform(0.15, 0.25, len(bands))
-            })
-            
-            st.session_state['stats'] = demo_stats
+            with st.spinner("Calculating statistics..."):
+                if use_aoi and EE_AVAILABLE and GEOMASTERPY_AVAILABLE:
+                    try:
+                        import ee
+                        
+                        # Initialize Earth Engine
+                        ee.Initialize()
+                        
+                        # Get the AOI geometry
+                        region = st.session_state.aoi_geometry
+                        
+                        # Select appropriate dataset
+                        if dataset == "Landsat 8":
+                            collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+                            band_mapping = {
+                                'Blue': 'SR_B2', 'Green': 'SR_B3', 'Red': 'SR_B4',
+                                'NIR': 'SR_B5', 'SWIR1': 'SR_B6', 'SWIR2': 'SR_B7'
+                            }
+                        elif dataset == "Sentinel-2":
+                            collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+                            band_mapping = {
+                                'Blue': 'B2', 'Green': 'B3', 'Red': 'B4',
+                                'NIR': 'B8', 'SWIR1': 'B11', 'SWIR2': 'B12'
+                            }
+                        else:  # MODIS
+                            collection = ee.ImageCollection('MODIS/061/MOD09A1')
+                            band_mapping = {
+                                'Red': 'sur_refl_b01', 'NIR': 'sur_refl_b02',
+                                'Blue': 'sur_refl_b03', 'Green': 'sur_refl_b04',
+                                'SWIR1': 'sur_refl_b06', 'SWIR2': 'sur_refl_b07'
+                            }
+                        
+                        # Filter collection
+                        image = collection.filterBounds(region) \
+                                        .filterDate(start_date.isoformat(), end_date.isoformat()) \
+                                        .median()
+                        
+                        # Select bands
+                        selected_bands = [band_mapping[band] for band in bands if band in band_mapping]
+                        image = image.select(selected_bands)
+                        
+                        # Calculate statistics
+                        stats = image.reduceRegion(
+                            reducer=ee.Reducer.mean().combine(
+                                ee.Reducer.stdDev(), '', True
+                            ).combine(
+                                ee.Reducer.minMax(), '', True
+                            ).combine(
+                                ee.Reducer.median(), '', True
+                            ),
+                            geometry=region,
+                            scale=scale,
+                            maxPixels=1e9
+                        ).getInfo()
+                        
+                        # Format results
+                        results = []
+                        for i, band in enumerate(bands):
+                            if band in band_mapping:
+                                ee_band = band_mapping[band]
+                                results.append({
+                                    'Band': band,
+                                    'Mean': stats.get(f'{ee_band}_mean', 0),
+                                    'Std': stats.get(f'{ee_band}_stdDev', 0),
+                                    'Min': stats.get(f'{ee_band}_min', 0),
+                                    'Max': stats.get(f'{ee_band}_max', 0),
+                                    'Median': stats.get(f'{ee_band}_median', 0)
+                                })
+                        
+                        if results:
+                            real_stats = pd.DataFrame(results)
+                            st.session_state['stats'] = real_stats
+                            st.success(f"✅ Calculated statistics for {st.session_state.aoi_name}")
+                        else:
+                            st.error("No valid data found for the selected bands and region")
+                            
+                    except Exception as e:
+                        st.error(f"Error calculating real statistics: {str(e)}")
+                        st.info("Falling back to demo data...")
+                        # Fall back to demo data
+                        demo_stats = pd.DataFrame({
+                            'Band': bands,
+                            'Mean': np.random.uniform(0.1, 0.3, len(bands)),
+                            'Std': np.random.uniform(0.05, 0.15, len(bands)),
+                            'Min': np.random.uniform(0.0, 0.1, len(bands)),
+                            'Max': np.random.uniform(0.4, 0.8, len(bands)),
+                            'Median': np.random.uniform(0.15, 0.25, len(bands))
+                        })
+                        st.session_state['stats'] = demo_stats
+                else:
+                    # Demo statistics for when AOI is not available or EE not initialized
+                    demo_stats = pd.DataFrame({
+                        'Band': bands,
+                        'Mean': np.random.uniform(0.1, 0.3, len(bands)),
+                        'Std': np.random.uniform(0.05, 0.15, len(bands)),
+                        'Min': np.random.uniform(0.0, 0.1, len(bands)),
+                        'Max': np.random.uniform(0.4, 0.8, len(bands)),
+                        'Median': np.random.uniform(0.15, 0.25, len(bands))
+                    })
+                    st.session_state['stats'] = demo_stats
+                    if not use_aoi:
+                        st.info("📍 These are sample statistics. Load an Area of Interest for real analysis.")
     
     with col2:
         st.markdown("#### Results")
@@ -1353,7 +1671,275 @@ def show_troubleshooting():
 
 # Helper functions for missing components
 def show_zonal_statistics():
-    st.info("Zonal statistics interface would be implemented here")
+    """Zonal statistics interface with AOI integration"""
+    
+    st.markdown("### 🎯 Zonal Statistics")
+    st.markdown("Calculate statistics for different zones within your area of interest")
+    
+    # Check for AOI
+    if st.session_state.get('aoi_geometry') is None:
+        st.warning("⚠️ Zonal statistics requires an Area of Interest to be defined")
+        st.markdown("""
+        **To use zonal statistics:**
+        1. Navigate to the **📁 Area of Interest** page
+        2. Load a GeoJSON file from Google Drive
+        3. Return here to analyze zones within your area
+        
+        **Note:** Your GeoJSON should contain multiple features/polygons to analyze as separate zones.
+        """)
+        return
+    
+    # Display current AOI info
+    st.success(f"✅ Analyzing zones within: **{st.session_state.get('aoi_name', 'Custom Area')}**")
+    
+    # Check if AOI has multiple features for zonal analysis
+    aoi_geojson = st.session_state.get('aoi_geojson')
+    if aoi_geojson and aoi_geojson.get('type') == 'FeatureCollection':
+        num_zones = len(aoi_geojson.get('features', []))
+        if num_zones > 1:
+            st.info(f"📊 Found {num_zones} zones for analysis")
+        else:
+            st.info("ℹ️ Single zone detected. Analysis will calculate statistics for the entire area.")
+    else:
+        st.info("ℹ️ Single zone detected. Analysis will calculate statistics for the entire area.")
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.markdown("#### Settings")
+        
+        dataset = st.selectbox(
+            "Dataset:",
+            ["Landsat 8", "Sentinel-2", "MODIS"],
+            help="Choose the satellite dataset for analysis"
+        )
+        
+        bands = st.multiselect(
+            "Bands to analyze:",
+            ["Blue", "Green", "Red", "NIR", "SWIR1", "SWIR2"],
+            default=["Red", "NIR", "Green"],
+            help="Select bands for statistical analysis"
+        )
+        
+        scale = st.number_input("Analysis scale (meters):", 10, 1000, 30)
+        
+        # Date range
+        col_start, col_end = st.columns(2)
+        with col_start:
+            start_date = st.date_input("Start date:", datetime(2023, 6, 1).date())
+        with col_end:
+            end_date = st.date_input("End date:", datetime(2023, 8, 31).date())
+        
+        # Analysis type
+        analysis_type = st.selectbox(
+            "Statistics to calculate:",
+            ["Basic (mean, median)", "Extended (mean, std, min, max)", "All statistics"],
+            index=1
+        )
+        
+        if st.button("🎯 Run Zonal Analysis", type="primary"):
+            if not bands:
+                st.error("Please select at least one band for analysis")
+                return
+                
+            with st.spinner("Running zonal statistics analysis..."):
+                if EE_AVAILABLE and GEOMASTERPY_AVAILABLE:
+                    try:
+                        import ee
+                        
+                        # Initialize Earth Engine
+                        ee.Initialize()
+                        
+                        # Get zones from AOI
+                        if aoi_geojson['type'] == 'FeatureCollection' and len(aoi_geojson['features']) > 1:
+                            # Multiple zones
+                            zones = ee.FeatureCollection(aoi_geojson)
+                        else:
+                            # Single zone - create a feature collection with one feature
+                            zones = ee.FeatureCollection([ee.Feature(st.session_state.aoi_geometry)])
+                        
+                        # Select dataset and bands
+                        if dataset == "Landsat 8":
+                            collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+                            band_mapping = {
+                                'Blue': 'SR_B2', 'Green': 'SR_B3', 'Red': 'SR_B4',
+                                'NIR': 'SR_B5', 'SWIR1': 'SR_B6', 'SWIR2': 'SR_B7'
+                            }
+                        elif dataset == "Sentinel-2":
+                            collection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+                            band_mapping = {
+                                'Blue': 'B2', 'Green': 'B3', 'Red': 'B4',
+                                'NIR': 'B8', 'SWIR1': 'B11', 'SWIR2': 'B12'
+                            }
+                        else:  # MODIS
+                            collection = ee.ImageCollection('MODIS/061/MOD09A1')
+                            band_mapping = {
+                                'Red': 'sur_refl_b01', 'NIR': 'sur_refl_b02',
+                                'Blue': 'sur_refl_b03', 'Green': 'sur_refl_b04',
+                                'SWIR1': 'sur_refl_b06', 'SWIR2': 'sur_refl_b07'
+                            }
+                        
+                        # Filter and select image
+                        image = collection.filterBounds(st.session_state.aoi_geometry) \
+                                        .filterDate(start_date.isoformat(), end_date.isoformat()) \
+                                        .median()
+                        
+                        # Select bands
+                        selected_bands = [band_mapping[band] for band in bands if band in band_mapping]
+                        image = image.select(selected_bands)
+                        
+                        # Choose reducer based on analysis type
+                        if analysis_type == "Basic (mean, median)":
+                            reducer = ee.Reducer.mean().combine(ee.Reducer.median(), '', True)
+                        elif analysis_type == "Extended (mean, std, min, max)":
+                            reducer = ee.Reducer.mean().combine(
+                                ee.Reducer.stdDev(), '', True
+                            ).combine(
+                                ee.Reducer.minMax(), '', True
+                            )
+                        else:  # All statistics
+                            reducer = ee.Reducer.mean().combine(
+                                ee.Reducer.stdDev(), '', True
+                            ).combine(
+                                ee.Reducer.minMax(), '', True
+                            ).combine(
+                                ee.Reducer.median(), '', True
+                            ).combine(
+                                ee.Reducer.count(), '', True
+                            )
+                        
+                        # Calculate zonal statistics
+                        zonal_stats = image.reduceRegions(
+                            collection=zones,
+                            reducer=reducer,
+                            scale=scale,
+                            crs='EPSG:4326'
+                        )
+                        
+                        # Get results
+                        results = zonal_stats.getInfo()
+                        
+                        # Process results into a DataFrame
+                        processed_results = []
+                        for i, feature in enumerate(results['features']):
+                            props = feature['properties']
+                            zone_data = {'Zone': f'Zone {i+1}'}
+                            
+                            # Extract statistics for each band
+                            for band in bands:
+                                if band in band_mapping:
+                                    ee_band = band_mapping[band]
+                                    if analysis_type == "Basic (mean, median)":
+                                        zone_data[f'{band}_mean'] = props.get(f'{ee_band}_mean', 0)
+                                        zone_data[f'{band}_median'] = props.get(f'{ee_band}_median', 0)
+                                    elif analysis_type == "Extended (mean, std, min, max)":
+                                        zone_data[f'{band}_mean'] = props.get(f'{ee_band}_mean', 0)
+                                        zone_data[f'{band}_std'] = props.get(f'{ee_band}_stdDev', 0)
+                                        zone_data[f'{band}_min'] = props.get(f'{ee_band}_min', 0)
+                                        zone_data[f'{band}_max'] = props.get(f'{ee_band}_max', 0)
+                                    else:  # All statistics
+                                        zone_data[f'{band}_mean'] = props.get(f'{ee_band}_mean', 0)
+                                        zone_data[f'{band}_std'] = props.get(f'{ee_band}_stdDev', 0)
+                                        zone_data[f'{band}_min'] = props.get(f'{ee_band}_min', 0)
+                                        zone_data[f'{band}_max'] = props.get(f'{ee_band}_max', 0)
+                                        zone_data[f'{band}_median'] = props.get(f'{ee_band}_median', 0)
+                                        zone_data[f'{band}_count'] = props.get(f'{ee_band}_count', 0)
+                            
+                            processed_results.append(zone_data)
+                        
+                        if processed_results:
+                            zonal_df = pd.DataFrame(processed_results)
+                            st.session_state['zonal_stats'] = zonal_df
+                            st.success(f"✅ Calculated zonal statistics for {len(processed_results)} zones")
+                        else:
+                            st.error("No valid data found for the selected parameters")
+                            
+                    except Exception as e:
+                        st.error(f"Error calculating zonal statistics: {str(e)}")
+                        st.info("Generating demo data...")
+                        
+                        # Generate demo data
+                        demo_zones = 3 if aoi_geojson.get('type') == 'FeatureCollection' and len(aoi_geojson.get('features', [])) > 1 else 1
+                        demo_data = []
+                        for i in range(demo_zones):
+                            zone_data = {'Zone': f'Zone {i+1}'}
+                            for band in bands:
+                                if analysis_type == "Basic (mean, median)":
+                                    zone_data[f'{band}_mean'] = round(np.random.uniform(0.1, 0.3), 3)
+                                    zone_data[f'{band}_median'] = round(np.random.uniform(0.15, 0.25), 3)
+                                elif analysis_type == "Extended (mean, std, min, max)":
+                                    zone_data[f'{band}_mean'] = round(np.random.uniform(0.1, 0.3), 3)
+                                    zone_data[f'{band}_std'] = round(np.random.uniform(0.05, 0.15), 3)
+                                    zone_data[f'{band}_min'] = round(np.random.uniform(0.0, 0.1), 3)
+                                    zone_data[f'{band}_max'] = round(np.random.uniform(0.4, 0.8), 3)
+                                else:  # All statistics
+                                    zone_data[f'{band}_mean'] = round(np.random.uniform(0.1, 0.3), 3)
+                                    zone_data[f'{band}_std'] = round(np.random.uniform(0.05, 0.15), 3)
+                                    zone_data[f'{band}_min'] = round(np.random.uniform(0.0, 0.1), 3)
+                                    zone_data[f'{band}_max'] = round(np.random.uniform(0.4, 0.8), 3)
+                                    zone_data[f'{band}_median'] = round(np.random.uniform(0.15, 0.25), 3)
+                                    zone_data[f'{band}_count'] = np.random.randint(1000, 5000)
+                            demo_data.append(zone_data)
+                        
+                        demo_df = pd.DataFrame(demo_data)
+                        st.session_state['zonal_stats'] = demo_df
+                        st.warning("⚠️ Showing demo data. Real analysis requires Earth Engine authentication.")
+                        
+                else:
+                    st.error("Earth Engine or GeoMasterPy not available. Cannot perform real analysis.")
+    
+    with col2:
+        st.markdown("#### Results")
+        
+        if 'zonal_stats' in st.session_state:
+            df = st.session_state['zonal_stats']
+            st.dataframe(df, use_container_width=True)
+            
+            # Download button
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv,
+                file_name=f"zonal_stats_{st.session_state.get('aoi_name', 'area').replace(' ', '_')}.csv",
+                mime="text/csv"
+            )
+            
+            # Visualization
+            if PLOTLY_AVAILABLE and len(df) > 1:
+                st.markdown("#### Visualization")
+                
+                # Select bands for plotting
+                numeric_cols = [col for col in df.columns if col != 'Zone' and not col.endswith('_count')]
+                
+                if numeric_cols:
+                    plot_bands = st.multiselect(
+                        "Select bands/statistics to plot:",
+                        numeric_cols,
+                        default=numeric_cols[:3] if len(numeric_cols) >= 3 else numeric_cols
+                    )
+                    
+                    if plot_bands:
+                        # Create comparison chart
+                        fig = px.bar(
+                            df.melt(id_vars=['Zone'], value_vars=plot_bands, 
+                                   var_name='Band_Stat', value_name='Value'),
+                            x='Zone', y='Value', color='Band_Stat',
+                            title="Zonal Statistics Comparison",
+                            height=400
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Run the analysis to see results here")
+            
+            # Show example of what zonal statistics can reveal
+            st.markdown("""
+            **Zonal statistics help you:**
+            - Compare different areas within your region
+            - Identify spatial patterns and variations
+            - Quantify differences between land cover types
+            - Monitor changes across different zones
+            - Generate reports for specific sub-regions
+            """)
 
 def show_classification():
     st.info("Classification interface would be implemented here")

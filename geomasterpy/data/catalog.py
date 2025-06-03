@@ -7,6 +7,8 @@ import re
 import requests
 from typing import List, Dict, Any, Optional
 import json
+import geopandas as gpd
+from io import StringIO
 
 
 def search_ee_data(keywords: str, max_results: int = 20) -> List[Dict[str, Any]]:
@@ -343,3 +345,200 @@ def list_available_datasets(category: Optional[str] = None) -> List[str]:
         for cat_datasets in datasets.values():
             all_datasets.extend(cat_datasets)
         return list(set(all_datasets))  # Remove duplicates
+
+
+def extract_drive_file_id(drive_url: str) -> Optional[str]:
+    """
+    Extract file ID from a Google Drive sharing URL.
+    
+    Supports various Google Drive URL formats:
+    - https://drive.google.com/file/d/FILE_ID/view?usp=sharing
+    - https://drive.google.com/open?id=FILE_ID
+    - https://drive.google.com/uc?id=FILE_ID
+    
+    Args:
+        drive_url: Google Drive sharing URL
+        
+    Returns:
+        File ID string or None if not found
+    """
+    if not drive_url or 'drive.google.com' not in drive_url:
+        return None
+    
+    # Pattern for /file/d/FILE_ID/view format
+    file_id_pattern = r'/file/d/([a-zA-Z0-9-_]+)'
+    match = re.search(file_id_pattern, drive_url)
+    if match:
+        return match.group(1)
+    
+    # Pattern for ?id=FILE_ID format
+    id_pattern = r'[?&]id=([a-zA-Z0-9-_]+)'
+    match = re.search(id_pattern, drive_url)
+    if match:
+        return match.group(1)
+    
+    return None
+
+
+def convert_drive_sharing_url(sharing_url: str) -> Optional[str]:
+    """
+    Convert Google Drive sharing URL to direct download URL.
+    
+    Args:
+        sharing_url: Google Drive sharing URL
+        
+    Returns:
+        Direct download URL or None if conversion failed
+    """
+    file_id = extract_drive_file_id(sharing_url)
+    if not file_id:
+        return None
+    
+    # Return direct download URL
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+
+def load_geojson_from_drive_url(drive_url: str, timeout: int = 30) -> Optional[Dict[str, Any]]:
+    """
+    Load GeoJSON data from a Google Drive sharing URL.
+    
+    Args:
+        drive_url: Google Drive sharing URL pointing to a GeoJSON file
+        timeout: Request timeout in seconds
+        
+    Returns:
+        GeoJSON data as dictionary or None if loading failed
+    """
+    try:
+        # Convert to direct download URL
+        download_url = convert_drive_sharing_url(drive_url)
+        if not download_url:
+            raise ValueError("Could not extract file ID from Google Drive URL")
+        
+        # Download the file
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(download_url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        
+        # Check if we got a redirect page (common with large files)
+        if 'text/html' in response.headers.get('content-type', ''):
+            # Look for the actual download link in the HTML
+            if 'confirm=' in response.text:
+                # Extract confirmation token for large files
+                confirm_pattern = r'confirm=([a-zA-Z0-9-_]+)'
+                match = re.search(confirm_pattern, response.text)
+                if match:
+                    confirm_token = match.group(1)
+                    download_url = f"{download_url}&confirm={confirm_token}"
+                    response = requests.get(download_url, headers=headers, timeout=timeout)
+                    response.raise_for_status()
+        
+        # Parse JSON
+        geojson_data = response.json()
+        
+        # Validate it's a valid GeoJSON
+        if not isinstance(geojson_data, dict):
+            raise ValueError("Downloaded data is not a valid JSON object")
+        
+        if 'type' not in geojson_data:
+            raise ValueError("Downloaded data is not a valid GeoJSON (missing 'type' field)")
+        
+        # Additional validation for GeoJSON structure
+        valid_types = ['FeatureCollection', 'Feature', 'Point', 'LineString', 'Polygon', 
+                      'MultiPoint', 'MultiLineString', 'MultiPolygon', 'GeometryCollection']
+        
+        if geojson_data['type'] not in valid_types:
+            raise ValueError(f"Invalid GeoJSON type: {geojson_data['type']}")
+        
+        return geojson_data
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading from Google Drive: {str(e)}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Error loading GeoJSON from Google Drive: {str(e)}")
+        return None
+
+
+def geojson_to_ee_geometry(geojson_data: Dict[str, Any]) -> Optional[ee.Geometry]:
+    """
+    Convert GeoJSON data to Earth Engine Geometry object.
+    
+    Args:
+        geojson_data: GeoJSON data dictionary
+        
+    Returns:
+        Earth Engine Geometry object or None if conversion failed
+    """
+    try:
+        # Initialize Earth Engine if needed
+        try:
+            ee.Initialize()
+        except:
+            print("Warning: Earth Engine not initialized")
+            return None
+        
+        # Handle different GeoJSON types
+        if geojson_data['type'] == 'FeatureCollection':
+            # Use the first feature's geometry or union all geometries
+            features = geojson_data.get('features', [])
+            if not features:
+                raise ValueError("FeatureCollection is empty")
+            
+            # If multiple features, union them into a single geometry
+            if len(features) == 1:
+                geometry_data = features[0]['geometry']
+            else:
+                # Union all geometries
+                geometries = []
+                for feature in features:
+                    if 'geometry' in feature and feature['geometry']:
+                        geom = ee.Geometry(feature['geometry'])
+                        geometries.append(geom)
+                
+                if geometries:
+                    return ee.Geometry.MultiPolygon(geometries).dissolve()
+                else:
+                    raise ValueError("No valid geometries found in features")
+        
+        elif geojson_data['type'] == 'Feature':
+            geometry_data = geojson_data['geometry']
+        
+        else:
+            # Direct geometry object
+            geometry_data = geojson_data
+        
+        # Create Earth Engine geometry
+        return ee.Geometry(geometry_data)
+        
+    except Exception as e:
+        print(f"Error converting GeoJSON to Earth Engine geometry: {str(e)}")
+        return None
+
+
+def validate_drive_url(url: str) -> bool:
+    """
+    Validate if a URL is a valid Google Drive sharing URL.
+    
+    Args:
+        url: URL to validate
+        
+    Returns:
+        True if valid Google Drive URL, False otherwise
+    """
+    if not url or not isinstance(url, str):
+        return False
+    
+    # Check if it's a Google Drive URL
+    if 'drive.google.com' not in url:
+        return False
+    
+    # Check if we can extract a file ID
+    file_id = extract_drive_file_id(url)
+    return file_id is not None
