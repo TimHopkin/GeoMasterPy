@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Streamlit App](https://img.shields.io/badge/🚀-Streamlit%20App-red.svg)](https://share.streamlit.io)
+[![Streamlit App](https://img.shields.io/badge/🚀-Streamlit%20App-red.svg)](https://geomasterpy.streamlit.app)
 
 **Interactive Geospatial Analysis Library for Google Earth Engine**
 
@@ -33,7 +33,7 @@ GeoMasterPy is a comprehensive Python library that significantly simplifies and 
 2. **Go to [share.streamlit.io](https://share.streamlit.io)**
 3. **Connect your GitHub account**
 4. **Deploy with:**
-   - Repository: `your-username/geomasterpy`
+   - Repository: `TimHopkin/GeoMasterPy`
    - Main file: `streamlit_app.py`
    - Requirements: `requirements_streamlit.txt`
 
@@ -41,8 +41,8 @@ GeoMasterPy is a comprehensive Python library that significantly simplifies and 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/geomasterpy.git
-cd geomasterpy
+git clone https://github.com/TimHopkin/GeoMasterPy.git
+cd GeoMasterPy
 
 # Install dependencies
 pip install -r requirements_streamlit.txt
@@ -71,8 +71,8 @@ pip install earthengine-api ipyleaflet ipywidgets numpy pandas cartopy matplotli
 
 ```bash
 # From source
-git clone https://github.com/yourusername/geomasterpy.git
-cd geomasterpy
+git clone https://github.com/TimHopkin/GeoMasterPy.git
+cd GeoMasterPy
 pip install -e .
 ```
 
@@ -286,8 +286,8 @@ GeoMasterPy/
 ### Heroku
 
 ```bash
-git clone https://github.com/yourusername/geomasterpy.git
-cd geomasterpy
+git clone https://github.com/TimHopkin/GeoMasterPy.git
+cd GeoMasterPy
 heroku create your-app-name
 git push heroku main
 ```
