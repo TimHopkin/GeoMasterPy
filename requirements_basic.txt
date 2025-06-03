@@ -5,3 +5,5 @@ folium
 streamlit-folium
 pandas
 numpy
+matplotlib
+altair
