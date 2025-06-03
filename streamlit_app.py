@@ -23,14 +23,29 @@ from io import BytesIO
 try:
     import geomasterpy as gmp
     GEOMASTERPY_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     GEOMASTERPY_AVAILABLE = False
+    print(f"GeoMasterPy not available: {e}")
 
 try:
     import ee
     EE_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     EE_AVAILABLE = False
+    print(f"Earth Engine not available: {e}")
+
+# Handle optional heavy dependencies gracefully
+try:
+    import cartopy
+    CARTOPY_AVAILABLE = True
+except ImportError:
+    CARTOPY_AVAILABLE = False
+
+try:
+    import ipyleaflet
+    IPYLEAFLET_AVAILABLE = True
+except ImportError:
+    IPYLEAFLET_AVAILABLE = False
 
 # Configure Streamlit page
 st.set_page_config(
@@ -77,29 +92,35 @@ def main():
     
     # Check system status
     with st.expander("🔧 System Status", expanded=False):
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if GEOMASTERPY_AVAILABLE:
-                st.success("✅ GeoMasterPy Loaded")
+                st.success("✅ GeoMasterPy")
             else:
-                st.error("❌ GeoMasterPy Not Available")
+                st.warning("⚠️ Demo Mode")
         
         with col2:
             if EE_AVAILABLE:
                 try:
                     ee.Initialize()
-                    st.success("✅ Earth Engine Ready")
+                    st.success("✅ Earth Engine")
                     ee_status = True
                 except:
-                    st.warning("⚠️ Earth Engine Not Authenticated")
+                    st.warning("⚠️ EE Auth Needed")
                     ee_status = False
             else:
-                st.error("❌ Earth Engine Not Available")
+                st.warning("⚠️ EE Offline")
                 ee_status = False
         
         with col3:
-            st.info("ℹ️ Demo Mode Available")
+            if CARTOPY_AVAILABLE:
+                st.success("✅ Cartopy")
+            else:
+                st.info("ℹ️ Cartopy Optional")
+        
+        with col4:
+            st.success("✅ Web App Ready")
     
     # Sidebar navigation
     st.sidebar.title("🧭 Navigation")
