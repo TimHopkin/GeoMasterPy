@@ -8,8 +8,8 @@ echo "=================================================="
 echo ""
 
 # Check if we're in the right directory
-if [ ! -f "streamlit_app.py" ]; then
-    echo "❌ Error: streamlit_app.py not found in current directory"
+if [ ! -f "streamlit_app_cloud.py" ]; then
+    echo "❌ Error: streamlit_app_cloud.py not found in current directory"
     echo "Please run this script from the GeoMasterPy project directory"
     exit 1
 fi
@@ -45,10 +45,7 @@ echo "=================================================="
 echo ""
 
 # Start the streamlit app with proper configuration
-python3 -m streamlit run streamlit_app.py \
+python3 -m streamlit run streamlit_app_cloud.py \
     --server.port 8501 \
-    --server.address 0.0.0.0 \
     --server.headless false \
-    --browser.gatherUsageStats false \
-    --server.enableCORS false \
-    --server.enableXsrfProtection false
+    --browser.gatherUsageStats false

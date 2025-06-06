@@ -839,8 +839,8 @@ def show_interactive_maps():
                     fillOpacity=0.7
                 ).add_to(m)
         
-        # Add a sample polygon
-        if location_name == "San Francisco, CA":
+        # Add a sample polygon (only for predefined locations)
+        if not use_aoi and 'location_name' in locals() and location_name == "San Francisco, CA":
             # Golden Gate Park boundary (approximate)
             park_coords = [
                 [37.7694, -122.4862],
@@ -944,7 +944,7 @@ def show_visualizations():
         st.markdown("### 📊 Environmental Time Series")
         
         # Generate sample time series data
-        dates = pd.date_range('2020-01-01', '2023-12-31', freq='M')
+        dates = pd.date_range('2020-01-01', '2023-12-31', freq='ME')
         
         # NDVI time series with trend and seasonality
         trend = np.linspace(0.35, 0.45, len(dates))
