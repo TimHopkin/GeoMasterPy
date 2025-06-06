@@ -95,12 +95,33 @@ def main():
     # Show deployment status
     show_system_status()
     
+    # Initialize session state for AOI if not exists
+    if 'aoi_geometry' not in st.session_state:
+        st.session_state.aoi_geometry = None
+    if 'aoi_geojson' not in st.session_state:
+        st.session_state.aoi_geojson = None
+    if 'aoi_name' not in st.session_state:
+        st.session_state.aoi_name = "Custom Area"
+    
     # Sidebar navigation
     st.sidebar.title("🧭 Navigation")
+    
+    # Show AOI status in sidebar
+    if st.session_state.aoi_geojson is not None:
+        st.sidebar.success(f"✅ AOI: {st.session_state.aoi_name}")
+        if st.sidebar.button("🗑️ Clear AOI"):
+            st.session_state.aoi_geometry = None
+            st.session_state.aoi_geojson = None
+            st.session_state.aoi_name = "Custom Area"
+            st.rerun()
+    else:
+        st.sidebar.info("📍 No AOI defined")
+    
     page = st.sidebar.selectbox(
         "Choose a feature:",
         [
             "🏠 Home",
+            "📁 Area of Interest",
             "📊 Data Analysis Demo",
             "🗺️ Interactive Maps", 
             "📈 Visualizations",
@@ -112,6 +133,8 @@ def main():
     # Route to different pages
     if page == "🏠 Home":
         show_home()
+    elif page == "📁 Area of Interest":
+        show_area_of_interest()
     elif page == "📊 Data Analysis Demo":
         show_data_analysis_demo()
     elif page == "🗺️ Interactive Maps":
@@ -253,11 +276,282 @@ def show_home():
         4. 📊 **Full Analysis** - Complete geospatial workflows
         """)
 
+def show_area_of_interest():
+    """Area of Interest definition interface with Google Drive GeoJSON support"""
+    
+    st.markdown("## 📁 Define Your Area of Interest")
+    st.markdown("Load a GeoJSON file from Google Drive to define your study area for analysis.")
+    
+    # Instructions
+    with st.expander("📖 How to use Google Drive GeoJSON", expanded=False):
+        st.markdown("""
+        ### Steps to share a GeoJSON file from Google Drive:
+        
+        1. **Upload your GeoJSON file to Google Drive**
+        2. **Right-click the file** and select "Share"
+        3. **Change permissions** to "Anyone with the link can view"
+        4. **Copy the sharing link** and paste it below
+        
+        ### Supported URL formats:
+        - `https://drive.google.com/file/d/FILE_ID/view?usp=sharing`
+        - `https://drive.google.com/open?id=FILE_ID`
+        - `https://drive.google.com/uc?id=FILE_ID`
+        
+        ### Tips:
+        - Ensure your GeoJSON file is valid
+        - Keep file sizes reasonable (< 10MB recommended)
+        - Use simple geometries for better performance
+        """)
+    
+    # Google Drive URL input
+    st.markdown("### 🔗 Google Drive GeoJSON URL")
+    
+    # URL input
+    drive_url = st.text_input(
+        "Enter Google Drive sharing URL:",
+        placeholder="https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing",
+        help="Paste the sharing URL of your GeoJSON file from Google Drive"
+    )
+    
+    # Optional: Area name
+    aoi_name = st.text_input(
+        "Area name (optional):",
+        value=st.session_state.aoi_name,
+        placeholder="e.g., My Study Area, Farm Boundary, etc."
+    )
+    
+    # Load button
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("🔄 Load GeoJSON", type="primary"):
+            if drive_url:
+                with st.spinner("Loading GeoJSON from Google Drive..."):
+                    try:
+                        # Extract file ID from Google Drive URL
+                        file_id = extract_drive_file_id(drive_url)
+                        if file_id:
+                            # Create direct download URL
+                            download_url = f"https://drive.google.com/uc?id={file_id}&export=download"
+                            
+                            if DEPENDENCIES['requests']:
+                                import requests
+                                response = requests.get(download_url)
+                                if response.status_code == 200:
+                                    try:
+                                        geojson_data = response.json()
+                                        
+                                        # Store in session state
+                                        st.session_state.aoi_geojson = geojson_data
+                                        st.session_state.aoi_name = aoi_name if aoi_name else "Custom Area"
+                                        
+                                        # Create a simple geometry representation for analysis
+                                        if geojson_data.get('type') == 'FeatureCollection':
+                                            # Use first feature's geometry
+                                            first_feature = geojson_data['features'][0]
+                                            st.session_state.aoi_geometry = first_feature['geometry']
+                                        else:
+                                            st.session_state.aoi_geometry = geojson_data.get('geometry', geojson_data)
+                                        
+                                        st.success(f"✅ Successfully loaded GeoJSON: {st.session_state.aoi_name}")
+                                        st.rerun()
+                                        
+                                    except json.JSONDecodeError:
+                                        st.error("Invalid GeoJSON format in the file")
+                                else:
+                                    st.error(f"Failed to download file. Status code: {response.status_code}")
+                            else:
+                                st.error("Requests library not available. Cannot load from Google Drive.")
+                        else:
+                            st.error("Invalid Google Drive URL. Please check the format.")
+                                    
+                    except Exception as e:
+                        st.error(f"Error loading GeoJSON: {str(e)}")
+            else:
+                st.warning("Please enter a Google Drive URL")
+    
+    with col2:
+        if st.button("🗑️ Clear Area"):
+            st.session_state.aoi_geometry = None
+            st.session_state.aoi_geojson = None
+            st.session_state.aoi_name = "Custom Area"
+            st.success("Area of interest cleared")
+            st.rerun()
+    
+    # Display current area of interest
+    if st.session_state.aoi_geojson:
+        st.markdown("### 📍 Current Area of Interest")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            st.info(f"**Name:** {st.session_state.aoi_name}")
+            
+            # Display basic info about the GeoJSON
+            geojson_type = st.session_state.aoi_geojson.get('type', 'Unknown')
+            st.info(f"**Type:** {geojson_type}")
+            
+            if geojson_type == 'FeatureCollection':
+                num_features = len(st.session_state.aoi_geojson.get('features', []))
+                st.info(f"**Features:** {num_features}")
+            
+        with col2:
+            # Show options for using this AOI
+            st.markdown("**Use this area for:**")
+            if st.button("🗺️ View on Interactive Map"):
+                st.info("Navigate to '🗺️ Interactive Maps' to visualize your area")
+            if st.button("📊 Run Data Analysis"):
+                st.info("Navigate to '📊 Data Analysis Demo' to analyze your area")
+        
+        # Display the GeoJSON on a map if Folium is available
+        if DEPENDENCIES['folium']:
+            st.markdown("### 🌍 Area Preview")
+            
+            try:
+                # Create a simple folium map
+                m = folium.Map(location=[0, 0], zoom_start=2)
+                
+                # Add GeoJSON to map
+                folium.GeoJson(
+                    st.session_state.aoi_geojson,
+                    style_function=lambda x: {
+                        'fillColor': 'red',
+                        'color': 'red',
+                        'weight': 2,
+                        'fillOpacity': 0.3
+                    }
+                ).add_to(m)
+                
+                # Try to fit bounds to the geometry
+                if geojson_type == 'FeatureCollection' and st.session_state.aoi_geojson['features']:
+                    # Get bounds from first feature
+                    coords = get_geojson_bounds(st.session_state.aoi_geojson)
+                    if coords:
+                        m.fit_bounds(coords)
+                
+                # Display map
+                st_folium(m, width=700, height=400)
+                
+            except Exception as e:
+                st.warning(f"Could not display map preview: {str(e)}")
+        
+        # Raw GeoJSON viewer (optional)
+        with st.expander("🔍 View Raw GeoJSON", expanded=False):
+            st.json(st.session_state.aoi_geojson)
+    
+    else:
+        st.markdown("### 📍 No Area of Interest Defined")
+        st.info("Load a GeoJSON file from Google Drive to define your study area.")
+        
+        # Show example without actual loading
+        st.markdown("### 📋 Example Analysis Workflow")
+        st.markdown("""
+        Once you load an area of interest, you can:
+        
+        1. **🗺️ Visualize** your area on interactive maps
+        2. **📊 Analyze** environmental data within your boundary
+        3. **📈 Create** time series charts and statistics
+        4. **💾 Export** results and processed data
+        
+        All analysis tools will automatically use your defined area as the region of interest.
+        """)
+
+def extract_drive_file_id(url):
+    """Extract file ID from Google Drive URL"""
+    import re
+    
+    # Match different Google Drive URL formats
+    patterns = [
+        r'https://drive\.google\.com/file/d/([a-zA-Z0-9-_]+)',
+        r'https://drive\.google\.com/open\?id=([a-zA-Z0-9-_]+)',
+        r'https://drive\.google\.com/uc\?id=([a-zA-Z0-9-_]+)'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
+
+def get_geojson_bounds(geojson):
+    """Get bounds from GeoJSON for map fitting"""
+    try:
+        if geojson['type'] == 'FeatureCollection':
+            features = geojson['features']
+            if features:
+                # Get coordinates from first feature
+                geometry = features[0]['geometry']
+                if geometry['type'] == 'Polygon':
+                    coords = geometry['coordinates'][0]
+                elif geometry['type'] == 'Point':
+                    coord = geometry['coordinates']
+                    return [[coord[1] - 0.01, coord[0] - 0.01], [coord[1] + 0.01, coord[0] + 0.01]]
+                else:
+                    return None
+                
+                # Calculate bounds
+                lats = [coord[1] for coord in coords]
+                lons = [coord[0] for coord in coords]
+                return [[min(lats), min(lons)], [max(lats), max(lons)]]
+        return None
+    except:
+        return None
+
+def get_aoi_center(geojson):
+    """Get center coordinates from GeoJSON"""
+    try:
+        if geojson['type'] == 'FeatureCollection':
+            features = geojson['features']
+            if features:
+                geometry = features[0]['geometry']
+                if geometry['type'] == 'Polygon':
+                    coords = geometry['coordinates'][0]
+                    # Calculate centroid
+                    lats = [coord[1] for coord in coords]
+                    lons = [coord[0] for coord in coords]
+                    return (sum(lats) / len(lats), sum(lons) / len(lons))
+                elif geometry['type'] == 'Point':
+                    coord = geometry['coordinates']
+                    return (coord[1], coord[0])
+        elif geojson.get('geometry'):
+            geometry = geojson['geometry']
+            if geometry['type'] == 'Point':
+                coord = geometry['coordinates']
+                return (coord[1], coord[0])
+            elif geometry['type'] == 'Polygon':
+                coords = geometry['coordinates'][0]
+                lats = [coord[1] for coord in coords]
+                lons = [coord[0] for coord in coords]
+                return (sum(lats) / len(lats), sum(lons) / len(lons))
+        return None
+    except:
+        return None
+
 def show_data_analysis_demo():
     """Data analysis demo with sample data"""
     
     st.markdown("## 📊 Data Analysis Demo")
-    st.markdown("Explore sample environmental and geospatial data")
+    
+    # Check AOI status and show appropriate message
+    if st.session_state.aoi_geojson is not None:
+        st.success(f"✅ Using Area of Interest: **{st.session_state.aoi_name}**")
+        st.info("Analysis will be focused on your defined area of interest.")
+        use_aoi = True
+    else:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.warning("⚠️ No Area of Interest defined. Analysis will use sample/global data.")
+        with col2:
+            if st.button("📁 Load AOI"):
+                st.info("Navigate to '📁 Area of Interest' to load your study area")
+        use_aoi = False
+    
+    if use_aoi:
+        st.markdown("### 🎯 Area-Specific Analysis")
+        st.markdown(f"Analyzing environmental data for: **{st.session_state.aoi_name}**")
+    else:
+        st.markdown("### 🌍 Global Sample Data Analysis")
+        st.markdown("Explore sample environmental and geospatial data")
     
     # Generate sample environmental data
     dates = pd.date_range('2023-01-01', '2023-12-31', freq='D')
@@ -398,7 +692,15 @@ def show_interactive_maps():
         st.code("pip install folium streamlit-folium")
         return
     
-    st.markdown("Create and explore interactive maps with sample data")
+    # Check AOI status
+    if st.session_state.aoi_geojson is not None:
+        st.success(f"✅ Displaying Area of Interest: **{st.session_state.aoi_name}**")
+        use_aoi = True
+    else:
+        st.info("💡 Load an Area of Interest to center the map on your study area")
+        use_aoi = False
+    
+    st.markdown("Create and explore interactive maps with your data")
     
     # Map configuration
     col1, col2 = st.columns([1, 2])
@@ -406,33 +708,45 @@ def show_interactive_maps():
     with col1:
         st.markdown("### 🎛️ Map Settings")
         
-        # Location selector
-        location_name = st.selectbox(
-            "Choose a location:",
-            [
-                "San Francisco, CA",
-                "New York, NY", 
-                "London, UK",
-                "Tokyo, Japan",
-                "Sydney, Australia",
-                "Custom Location"
-            ]
-        )
-        
-        # Predefined locations
-        locations = {
-            "San Francisco, CA": (37.7749, -122.4194),
-            "New York, NY": (40.7128, -74.0060),
-            "London, UK": (51.5074, -0.1278),
-            "Tokyo, Japan": (35.6762, 139.6503),
-            "Sydney, Australia": (-33.8688, 151.2093),
-        }
-        
-        if location_name == "Custom Location":
-            lat = st.number_input("Latitude", value=37.7749, format="%.4f", min_value=-90.0, max_value=90.0)
-            lon = st.number_input("Longitude", value=-122.4194, format="%.4f", min_value=-180.0, max_value=180.0)
+        # Location selector - change based on AOI availability
+        if use_aoi:
+            st.markdown("📍 **Map will center on your Area of Interest**")
+            
+            # Get center from AOI
+            aoi_center = get_aoi_center(st.session_state.aoi_geojson)
+            if aoi_center:
+                lat, lon = aoi_center
+                st.info(f"Center: {lat:.4f}, {lon:.4f}")
+            else:
+                lat, lon = (0, 0)
+                st.warning("Could not determine AOI center, using default")
         else:
-            lat, lon = locations[location_name]
+            location_name = st.selectbox(
+                "Choose a location:",
+                [
+                    "San Francisco, CA",
+                    "New York, NY", 
+                    "London, UK",
+                    "Tokyo, Japan",
+                    "Sydney, Australia",
+                    "Custom Location"
+                ]
+            )
+            
+            # Predefined locations
+            locations = {
+                "San Francisco, CA": (37.7749, -122.4194),
+                "New York, NY": (40.7128, -74.0060),
+                "London, UK": (51.5074, -0.1278),
+                "Tokyo, Japan": (35.6762, 139.6503),
+                "Sydney, Australia": (-33.8688, 151.2093),
+            }
+            
+            if location_name == "Custom Location":
+                lat = st.number_input("Latitude", value=37.7749, format="%.4f", min_value=-90.0, max_value=90.0)
+                lon = st.number_input("Longitude", value=-122.4194, format="%.4f", min_value=-180.0, max_value=180.0)
+            else:
+                lat, lon = locations[location_name]
         
         zoom = st.slider("Zoom Level", 1, 18, 10)
         
@@ -472,13 +786,33 @@ def show_interactive_maps():
             tiles=tiles
         )
         
-        # Add main marker
-        folium.Marker(
-            [lat, lon],
-            popup=f"📍 {location_name}",
-            tooltip="Main Location",
-            icon=folium.Icon(color='red', icon='info-sign')
-        ).add_to(m)
+        # Add AOI or main marker
+        if use_aoi:
+            # Add AOI to map
+            folium.GeoJson(
+                st.session_state.aoi_geojson,
+                style_function=lambda x: {
+                    'fillColor': 'blue',
+                    'color': 'blue',
+                    'weight': 3,
+                    'fillOpacity': 0.3
+                },
+                popup=f"Area of Interest: {st.session_state.aoi_name}",
+                tooltip=f"AOI: {st.session_state.aoi_name}"
+            ).add_to(m)
+            
+            # Fit bounds to AOI
+            bounds = get_geojson_bounds(st.session_state.aoi_geojson)
+            if bounds:
+                m.fit_bounds(bounds)
+        else:
+            # Add main marker
+            folium.Marker(
+                [lat, lon],
+                popup=f"📍 {location_name}",
+                tooltip="Main Location",
+                icon=folium.Icon(color='red', icon='info-sign')
+            ).add_to(m)
         
         # Add sample data points if enabled
         if show_sample_data:
