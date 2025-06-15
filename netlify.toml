@@ -1,0 +1,35 @@
+[build]
+  # No build process needed for static HTML
+  publish = "src/web"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  # Handle hash-based routing - serve main app for all routes
+  from = "/*"
+  to = "/land-app-ui-mockup.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
