@@ -184,6 +184,7 @@ requirements_minimal.txt
         "Choose a feature:",
         [
             "🏠 Home",
+            "🌍 Land App (New!)",
             "📁 Area of Interest",
             "🗺️ Interactive Maps", 
             "🔍 Data Catalog",
@@ -199,6 +200,8 @@ requirements_minimal.txt
     # Route to different pages
     if page == "🏠 Home":
         show_home()
+    elif page == "🌍 Land App (New!)":
+        show_land_app()
     elif page == "📁 Area of Interest":
         show_area_of_interest()
     elif page == "🗺️ Interactive Maps":
@@ -217,6 +220,82 @@ requirements_minimal.txt
         show_publication_maps()
     elif page == "📚 Documentation":
         show_documentation()
+
+def show_land_app():
+    """Display the Land App interface"""
+    
+    st.markdown("# 🌍 Land App - Advanced Land Management Platform")
+    
+    # Option to run the dedicated Land App
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown("""
+        ### 🚀 New Land Management Application
+        
+        Our **Land App** is a comprehensive land management platform featuring:
+        
+        - **🗺️ Interactive Mapping** with OpenStreetMap integration
+        - **✏️ Drawing Tools** for polygons, circles, rectangles, and points
+        - **📋 Plans Management** to organize and manage spatial features
+        - **🎓 Learning Centre** with interactive tutorials and AI assistance
+        - **🔗 URL Navigation** between map and learning sections
+        - **📊 Real-time Analysis** with instant area calculations
+        - **🌐 Offline Capability** - works without internet once loaded
+        
+        **Designed with Material Design 3** for a modern, intuitive experience.
+        """)
+    
+    with col2:
+        st.markdown("### 🎯 Quick Access")
+        
+        # Direct link to standalone Land App
+        land_app_url = "streamlit_land_app.py"
+        st.markdown(f"""
+        **🌍 Standalone Land App:**  
+        Run: `streamlit run streamlit_land_app.py`
+        
+        **🌐 Local HTML Version:**  
+        Open: `src/web/land-app-ui-mockup.html`
+        """)
+        
+        if st.button("🚀 Launch Land App in New Tab", help="Opens the standalone Land App"):
+            st.markdown("""
+            **To launch the Land App:**
+            1. Open a new terminal
+            2. Run: `streamlit run streamlit_land_app.py --server.port 8502`
+            3. Open: http://localhost:8502
+            """)
+    
+    # Embedded preview
+    st.markdown("---")
+    st.markdown("### 📱 Live Preview")
+    
+    # Load and display the Land App HTML
+    from pathlib import Path
+    land_app_path = Path(__file__).parent / "src" / "web" / "land-app-ui-mockup.html"
+    
+    if land_app_path.exists():
+        # Read the HTML file
+        with open(land_app_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Display the HTML content in an iframe-style container
+        st.components.v1.html(html_content, height=600, scrolling=True)
+        
+        # Download option
+        st.markdown("### 📥 Download")
+        st.download_button(
+            label="💾 Download Complete Land App",
+            data=html_content,
+            file_name="land-app.html",
+            mime="text/html",
+            help="Download the complete Land App as a single HTML file"
+        )
+        
+    else:
+        st.error("Land App HTML file not found.")
+        st.info("Expected location: src/web/land-app-ui-mockup.html")
 
 def show_home():
     """Home page with overview and quick start"""
