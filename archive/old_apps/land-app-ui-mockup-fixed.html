@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Land App - Advanced Land Management Platform</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    <style>
+        :root {
+            /* Material Design 3 Color System */
+            --md-sys-color-primary: #6750A4;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-primary-container: #EADDFF;
+            --md-sys-color-on-primary-container: #21005D;
+            
+            --md-sys-color-secondary: #625B71;
+            --md-sys-color-on-secondary: #FFFFFF;
+            --md-sys-color-secondary-container: #E8DEF8;
+            --md-sys-color-on-secondary-container: #1D192B;
+            
+            --md-sys-color-surface: #FEF7FF;
+            --md-sys-color-surface-container: #F3EDF7;
+            --md-sys-color-surface-container-high: #ECE6F0;
+            --md-sys-color-on-surface: #1C1B1F;
+            --md-sys-color-on-surface-variant: #49454F;
+            
+            --md-sys-color-outline: #79747E;
+            --md-sys-color-outline-variant: #CAC4D0;
+            
+            --md-sys-color-error: #B3261E;
+            --md-sys-color-on-error: #FFFFFF;
+            
+            /* Land Management Semantic Colors */
+            --land-color-vegetation: #4CAF50;
+            --land-color-water: #2196F3;
+            --land-color-soil: #8D6E63;
+            --land-color-crops: #FF9800;
+            --land-color-warning: #FF5722;
+            
+            /* Material Design 3 Elevation */
+            --md-sys-elevation-level1: 0px 1px 2px 0px rgba(0, 0, 0, 0.30), 0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+            --md-sys-elevation-level2: 0px 1px 2px 0px rgba(0, 0, 0, 0.30), 0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+            --md-sys-elevation-level3: 0px 1px 3px 0px rgba(0, 0, 0, 0.30), 0px 4px 8px 3px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--md-sys-color-surface);
+            color: var(--md-sys-color-on-surface);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background: var(--md-sys-color-surface);
+            border-bottom: 1px solid var(--md-sys-color-outline-variant);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--md-sys-color-primary);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--md-sys-color-on-surface);
+            transition: background-color 0.2s;
+        }
+
+        .header-btn:hover {
+            background: var(--md-sys-color-surface-container);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--md-sys-color-surface);
+            border-right: 1px solid var(--md-sys-color-outline-variant);
+            padding-top: 64px;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            padding: 16px 0;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 24px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            color: var(--md-sys-color-on-surface);
+        }
+
+        .nav-item:hover {
+            background: var(--md-sys-color-surface-container);
+        }
+
+        .nav-item.active {
+            background: var(--md-sys-color-primary-container);
+            color: var(--md-sys-color-on-primary-container);
+        }
+
+        .nav-item i {
+            font-size: 24px;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            position: relative;
+            padding-top: 64px;
+        }
+
+        .map-container {
+            width: 100%;
+            height: calc(100vh - 64px);
+            position: relative;
+        }
+
+        #map_div {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Panels */
+        .panel {
+            position: fixed;
+            top: 64px;
+            right: -450px;
+            width: 400px;
+            height: calc(100vh - 64px);
+            background: var(--md-sys-color-surface);
+            border-left: 1px solid var(--md-sys-color-outline-variant);
+            box-shadow: var(--md-sys-elevation-level3);
+            transition: right 0.3s ease;
+            z-index: 900;
+            overflow-y: auto;
+        }
+
+        .panel.visible {
+            right: 0;
+        }
+
+        .panel-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--md-sys-color-outline-variant);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--md-sys-color-on-surface);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .panel-close {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 50%;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--md-sys-color-on-surface);
+        }
+
+        .panel-content {
+            padding: 24px;
+        }
+
+        /* OSM Panel Specific */
+        .feature-category {
+            margin-bottom: 24px;
+        }
+
+        .category-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--md-sys-color-on-surface);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-toggles {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .feature-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background-color 0.2s;
+        }
+
+        .feature-toggle:hover {
+            background: var(--md-sys-color-surface-container);
+        }
+
+        .toggle-slider {
+            width: 40px;
+            height: 20px;
+            background: var(--md-sys-color-outline-variant);
+            border-radius: 10px;
+            position: relative;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-slider::before {
+            content: '';
+            position: absolute;
+            left: 2px;
+            top: 2px;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+
+        .feature-toggle input:checked + .toggle-slider {
+            background: var(--md-sys-color-primary);
+        }
+
+        .feature-toggle input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        .feature-toggle input {
+            display: none;
+        }
+
+        .feature-label {
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface);
+        }
+
+        /* Learning Center */
+        .learning-center {
+            display: none;
+            position: fixed;
+            top: 64px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--md-sys-color-surface);
+            z-index: 999;
+            overflow-y: auto;
+        }
+
+        .learning-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--md-sys-color-outline-variant);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .learning-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--md-sys-color-on-surface);
+        }
+
+        .learning-content {
+            padding: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--md-sys-color-surface-container);
+            color: var(--md-sys-color-on-surface);
+            padding: 16px 24px;
+            border-radius: 8px;
+            box-shadow: var(--md-sys-elevation-level3);
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .notification.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .notification.success {
+            background: var(--land-color-vegetation);
+            color: white;
+        }
+
+        .notification.error {
+            background: var(--md-sys-color-error);
+            color: var(--md-sys-color-on-error);
+        }
+
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            background: var(--md-sys-color-surface-container);
+            border: 1px solid var(--md-sys-color-outline-variant);
+            border-radius: 8px;
+            box-shadow: var(--md-sys-elevation-level3);
+            padding: 8px 0;
+            min-width: 200px;
+            z-index: 10000;
+            display: none;
+        }
+
+        .context-menu-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: var(--md-sys-color-on-surface);
+            transition: background-color 0.2s;
+        }
+
+        .context-menu-item:hover {
+            background: var(--md-sys-color-surface-container-high);
+        }
+
+        .context-menu-item i {
+            font-size: 18px;
+            color: var(--md-sys-color-primary);
+        }
+
+        .context-menu-separator {
+            height: 1px;
+            background: var(--md-sys-color-outline-variant);
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <div class="logo">🌱 Land App</div>
+            </div>
+            <div class="header-right">
+                <button class="header-btn" id="learningBtn" title="Learning Center">
+                    <i class="material-symbols-rounded">school</i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="nav-section">
+                <div class="nav-item active" data-section="dashboard">
+                    <i class="material-symbols-rounded">dashboard</i>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-section="osm">
+                    <i class="material-symbols-rounded">location_on</i>
+                    <span>OSM Data</span>
+                </div>
+                <div class="nav-item" data-section="analysis">
+                    <i class="material-symbols-rounded">analytics</i>
+                    <span>Analysis</span>
+                </div>
+                <div class="nav-item" data-section="collaboration">
+                    <i class="material-symbols-rounded">group</i>
+                    <span>Collaboration</span>
+                </div>
+                <div class="nav-item" data-section="settings">
+                    <i class="material-symbols-rounded">settings</i>
+                    <span>Settings</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="map-container">
+                <div id="map_div"></div>
+            </div>
+        </main>
+
+        <!-- OSM Panel -->
+        <div class="panel" id="osmPanel">
+            <div class="panel-header">
+                <h3 class="panel-title">
+                    <i class="material-symbols-rounded">location_on</i>
+                    OpenStreetMap Data
+                </h3>
+                <button class="panel-close" id="osmPanelClose">
+                    <i class="material-symbols-rounded">close</i>
+                </button>
+            </div>
+            <div class="panel-content">
+                <div class="feature-category">
+                    <h5 class="category-title">
+                        <i class="material-symbols-rounded">restaurant</i>
+                        Food & Dining
+                    </h5>
+                    <div class="feature-toggles">
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-restaurants" data-feature="restaurants">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">🍽️ Restaurants</span>
+                        </label>
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-cafes" data-feature="cafes">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">☕ Cafes</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="feature-category">
+                    <h5 class="category-title">
+                        <i class="material-symbols-rounded">domain</i>
+                        Buildings & Infrastructure
+                    </h5>
+                    <div class="feature-toggles">
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-buildings" data-feature="buildings">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">🏢 Buildings</span>
+                        </label>
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-residential" data-feature="residential">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">🏘️ Residential Areas</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="feature-category">
+                    <h5 class="category-title">
+                        <i class="material-symbols-rounded">landscape</i>
+                        Land Use & Agriculture
+                    </h5>
+                    <div class="feature-toggles">
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-farmland" data-feature="farmland">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">🌾 Farmland</span>
+                        </label>
+                        <label class="feature-toggle">
+                            <input type="checkbox" id="toggle-forest" data-feature="forest">
+                            <span class="toggle-slider"></span>
+                            <span class="feature-label">🌲 Forests</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Learning Center -->
+        <div class="learning-center" id="learningCenter">
+            <div class="learning-header">
+                <h2 class="learning-title">Learning Center</h2>
+                <button class="header-btn" id="learningCloseBtn">
+                    <i class="material-symbols-rounded">close</i>
+                </button>
+            </div>
+            <div class="learning-content">
+                <h3>Welcome to the Learning Center</h3>
+                <p>This is where you can access tutorials, documentation, and educational content about land management and GIS analysis.</p>
+                
+                <div style="margin-top: 32px;">
+                    <h4>Available Courses</h4>
+                    <ul style="margin-top: 16px; margin-left: 24px;">
+                        <li>Introduction to Land Management</li>
+                        <li>GIS Fundamentals</li>
+                        <li>Biodiversity Assessment</li>
+                        <li>Satellite Data Analysis</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div class="context-menu" id="contextMenu">
+            <div class="context-menu-item" data-action="inspect">
+                <i class="material-symbols-rounded">info</i>
+                <span>Inspect Feature</span>
+            </div>
+            <div class="context-menu-item" data-action="copy-to-plan">
+                <i class="material-symbols-rounded">content_copy</i>
+                <span>Copy to Plan</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="export">
+                <i class="material-symbols-rounded">download</i>
+                <span>Export Data</span>
+            </div>
+        </div>
+
+        <!-- Notification -->
+        <div class="notification" id="notification"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script>
+        // Global variables
+        let map;
+        let activeFeatureLayers = new Map();
+        let contextMenu;
+        let notification;
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            try {
+                initializeApp();
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showNotification('Application failed to initialize', 'error');
+            }
+        });
+
+        function initializeApp() {
+            // Initialize components
+            initializeMap();
+            initializeNavigation();
+            initializeOSMPanel();
+            initializeContextMenu();
+            initializeLearningCenter();
+            
+            // Get notification element
+            notification = document.getElementById('notification');
+            
+            console.log('Application initialized successfully');
+            showNotification('Land App loaded successfully', 'success');
+        }
+
+        function initializeMap() {
+            try {
+                // Initialize map
+                map = L.map('map_div', { zoomControl: false }).setView([51.1867, -0.5749], 15);
+                
+                // Add default tile layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Add zoom control to bottom right
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+                
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Map initialization failed:', error);
+                throw error;
+            }
+        }
+
+        function initializeNavigation() {
+            try {
+                const navItems = document.querySelectorAll('.nav-item');
+                
+                navItems.forEach(item => {
+                    item.addEventListener('click', function() {
+                        const section = this.dataset.section;
+                        
+                        // Remove active class from all items
+                        navItems.forEach(nav => nav.classList.remove('active'));
+                        
+                        // Add active class to clicked item
+                        this.classList.add('active');
+                        
+                        // Handle different sections
+                        handleNavigation(section);
+                    });
+                });
+                
+                console.log('Navigation initialized successfully');
+            } catch (error) {
+                console.error('Navigation initialization failed:', error);
+            }
+        }
+
+        function handleNavigation(section) {
+            try {
+                // Hide all panels first
+                hideAllPanels();
+                
+                switch(section) {
+                    case 'osm':
+                        showOSMPanel();
+                        break;
+                    case 'dashboard':
+                        showNotification('Dashboard view activated');
+                        break;
+                    case 'analysis':
+                        showNotification('Analysis tools coming soon');
+                        break;
+                    case 'collaboration':
+                        showNotification('Collaboration features coming soon');
+                        break;
+                    case 'settings':
+                        showNotification('Settings panel coming soon');
+                        break;
+                    default:
+                        console.log('Unknown section:', section);
+                }
+            } catch (error) {
+                console.error('Navigation error:', error);
+                showNotification('Navigation failed', 'error');
+            }
+        }
+
+        function hideAllPanels() {
+            const panels = document.querySelectorAll('.panel');
+            panels.forEach(panel => panel.classList.remove('visible'));
+        }
+
+        function showOSMPanel() {
+            try {
+                const osmPanel = document.getElementById('osmPanel');
+                if (osmPanel) {
+                    osmPanel.classList.add('visible');
+                    showNotification('OSM Data panel opened');
+                } else {
+                    console.error('OSM panel not found');
+                }
+            } catch (error) {
+                console.error('Error showing OSM panel:', error);
+            }
+        }
+
+        function initializeOSMPanel() {
+            try {
+                // Close button
+                const closeBtn = document.getElementById('osmPanelClose');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', function() {
+                        document.getElementById('osmPanel').classList.remove('visible');
+                        showNotification('OSM panel closed');
+                    });
+                }
+
+                // Feature toggles
+                const toggles = document.querySelectorAll('[data-feature]');
+                toggles.forEach(toggle => {
+                    toggle.addEventListener('change', function() {
+                        const featureType = this.dataset.feature;
+                        const isChecked = this.checked;
+                        
+                        if (isChecked) {
+                            loadOSMFeature(featureType);
+                        } else {
+                            removeOSMFeature(featureType);
+                        }
+                    });
+                });
+                
+                console.log('OSM panel initialized successfully');
+            } catch (error) {
+                console.error('OSM panel initialization failed:', error);
+            }
+        }
+
+        function loadOSMFeature(featureType) {
+            try {
+                showNotification(`Loading ${featureType}...`);
+                
+                // Get current map bounds
+                const bounds = map.getBounds();
+                const bbox = `${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()}`;
+                
+                // Generate query based on feature type
+                const query = generateOSMQuery(featureType, bbox);
+                
+                // Fetch from Overpass API
+                fetch('https://overpass-api.de/api/interpreter', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `data=${encodeURIComponent(query)}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    createFeatureLayer(data, featureType);
+                    showNotification(`${featureType} loaded successfully`, 'success');
+                })
+                .catch(error => {
+                    console.error(`Error loading ${featureType}:`, error);
+                    showNotification(`Failed to load ${featureType}`, 'error');
+                    document.getElementById(`toggle-${featureType}`).checked = false;
+                });
+            } catch (error) {
+                console.error('Error in loadOSMFeature:', error);
+                showNotification('Failed to load OSM data', 'error');
+            }
+        }
+
+        function generateOSMQuery(featureType, bbox) {
+            const queries = {
+                restaurants: `[out:json][timeout:25];(node["amenity"="restaurant"](${bbox});way["amenity"="restaurant"](${bbox}););out center;`,
+                cafes: `[out:json][timeout:25];(node["amenity"="cafe"](${bbox});way["amenity"="cafe"](${bbox}););out center;`,
+                buildings: `[out:json][timeout:25];(way["building"](${bbox});relation["building"](${bbox}););out geom;`,
+                residential: `[out:json][timeout:25];(way["landuse"="residential"](${bbox});relation["landuse"="residential"](${bbox}););out geom;`,
+                farmland: `[out:json][timeout:25];(way["landuse"="farmland"](${bbox});relation["landuse"="farmland"](${bbox}););out geom;`,
+                forest: `[out:json][timeout:25];(way["landuse"="forest"](${bbox});way["natural"="wood"](${bbox});relation["landuse"="forest"](${bbox});relation["natural"="wood"](${bbox}););out geom;`
+            };
+            
+            return queries[featureType] || queries.restaurants;
+        }
+
+        function createFeatureLayer(data, featureType) {
+            try {
+                const layer = L.layerGroup();
+                
+                const icons = {
+                    restaurants: '🍽️', cafes: '☕', buildings: '🏢', 
+                    residential: '🏘️', farmland: '🌾', forest: '🌲'
+                };
+                
+                const polygonTypes = ['buildings', 'residential', 'farmland', 'forest'];
+                const isPolygonType = polygonTypes.includes(featureType);
+                const icon = icons[featureType] || '📍';
+                
+                data.elements.forEach(element => {
+                    const tags = element.tags || {};
+                    const name = tags.name || tags.amenity || tags.landuse || tags.natural || tags.building || 'Unnamed Feature';
+                    
+                    if (isPolygonType && element.type === 'way' && element.geometry) {
+                        // Create polygon
+                        const coords = element.geometry.map(coord => [coord.lat, coord.lon]);
+                        
+                        if (coords.length > 2) {
+                            const polygon = L.polygon(coords, {
+                                color: getFeatureColor(featureType),
+                                fillColor: getFeatureColor(featureType),
+                                fillOpacity: 0.3,
+                                weight: 2,
+                                opacity: 0.8
+                            });
+                            
+                            const featureData = {
+                                element: element,
+                                tags: tags,
+                                name: name,
+                                category: featureType,
+                                id: element.id || null,
+                                type: element.type || 'way'
+                            };
+                            
+                            polygon.bindPopup(`
+                                <div style="min-width: 200px;">
+                                    <h4 style="margin: 0 0 8px 0; color: #333;">${name}</h4>
+                                    <p style="margin: 0 0 4px 0; color: #666;"><strong>Type:</strong> ${featureType}</p>
+                                    <p style="margin: 0; color: #666;"><strong>Right-click for options</strong></p>
+                                </div>
+                            `);
+                            
+                            // Add click and context menu handlers
+                            polygon.on('click', function(e) {
+                                e.originalEvent.stopPropagation();
+                                showNotification(`Selected ${name}`);
+                            });
+
+                            polygon.on('contextmenu', function(e) {
+                                e.originalEvent.preventDefault();
+                                e.originalEvent.stopPropagation();
+                                showContextMenu(e.originalEvent, featureData);
+                            });
+                            
+                            layer.addLayer(polygon);
+                        }
+                    } else {
+                        // Create point marker
+                        let lat, lon;
+                        
+                        if (element.type === 'node') {
+                            lat = element.lat;
+                            lon = element.lon;
+                        } else if (element.center) {
+                            lat = element.center.lat;
+                            lon = element.center.lon;
+                        } else {
+                            return;
+                        }
+                        
+                        const marker = L.marker([lat, lon], {
+                            icon: L.divIcon({
+                                html: `<div style="background: white; border: 2px solid #4CAF50; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${icon}</div>`,
+                                className: 'osm-marker',
+                                iconSize: [30, 30],
+                                iconAnchor: [15, 15]
+                            })
+                        });
+                        
+                        marker.bindPopup(`
+                            <div style="min-width: 200px;">
+                                <h4 style="margin: 0 0 8px 0; color: #333;">${name}</h4>
+                                <p style="margin: 0; color: #666;"><strong>Type:</strong> ${featureType}</p>
+                            </div>
+                        `);
+                        
+                        layer.addLayer(marker);
+                    }
+                });
+                
+                // Add layer to map and track it
+                layer.addTo(map);
+                activeFeatureLayers.set(featureType, layer);
+                
+            } catch (error) {
+                console.error(`Error creating feature layer for ${featureType}:`, error);
+            }
+        }
+
+        function removeOSMFeature(featureType) {
+            try {
+                const layer = activeFeatureLayers.get(featureType);
+                if (layer) {
+                    map.removeLayer(layer);
+                    activeFeatureLayers.delete(featureType);
+                    showNotification(`${featureType} removed`);
+                }
+            } catch (error) {
+                console.error(`Error removing ${featureType}:`, error);
+            }
+        }
+
+        function getFeatureColor(featureType) {
+            const colors = {
+                buildings: '#9E9E9E',
+                residential: '#FF9800',
+                farmland: '#8BC34A',
+                forest: '#4CAF50'
+            };
+            return colors[featureType] || '#2196F3';
+        }
+
+        function initializeContextMenu() {
+            try {
+                contextMenu = document.getElementById('contextMenu');
+                
+                // Hide context menu when clicking elsewhere
+                document.addEventListener('click', function(e) {
+                    if (contextMenu && !contextMenu.contains(e.target)) {
+                        hideContextMenu();
+                    }
+                });
+
+                // Handle context menu clicks
+                if (contextMenu) {
+                    contextMenu.addEventListener('click', function(e) {
+                        const action = e.target.closest('.context-menu-item')?.dataset.action;
+                        
+                        if (action) {
+                            hideContextMenu();
+                            handleContextMenuAction(action);
+                        }
+                    });
+                }
+                
+                console.log('Context menu initialized successfully');
+            } catch (error) {
+                console.error('Context menu initialization failed:', error);
+            }
+        }
+
+        function showContextMenu(event, featureData) {
+            try {
+                if (!contextMenu) return;
+                
+                const x = event.clientX;
+                const y = event.clientY;
+                
+                contextMenu.style.left = x + 'px';
+                contextMenu.style.top = y + 'px';
+                contextMenu.style.display = 'block';
+                
+                // Store feature data for context menu actions
+                contextMenu.featureData = featureData;
+                
+                // Adjust position if menu would go off screen
+                setTimeout(() => {
+                    const menuRect = contextMenu.getBoundingClientRect();
+                    const windowWidth = window.innerWidth;
+                    const windowHeight = window.innerHeight;
+                    
+                    if (menuRect.right > windowWidth) {
+                        contextMenu.style.left = (x - menuRect.width) + 'px';
+                    }
+                    if (menuRect.bottom > windowHeight) {
+                        contextMenu.style.top = (y - menuRect.height) + 'px';
+                    }
+                }, 10);
+            } catch (error) {
+                console.error('Error showing context menu:', error);
+            }
+        }
+
+        function hideContextMenu() {
+            if (contextMenu) {
+                contextMenu.style.display = 'none';
+            }
+        }
+
+        function handleContextMenuAction(action) {
+            try {
+                const featureData = contextMenu.featureData;
+                
+                switch(action) {
+                    case 'inspect':
+                        showNotification(`Inspecting ${featureData.name}`);
+                        break;
+                    case 'copy-to-plan':
+                        showNotification(`"${featureData.name}" copied to plan`, 'success');
+                        break;
+                    case 'export':
+                        showNotification(`Exporting ${featureData.name}...`);
+                        break;
+                    default:
+                        console.log('Unknown action:', action);
+                }
+            } catch (error) {
+                console.error('Context menu action error:', error);
+            }
+        }
+
+        function initializeLearningCenter() {
+            try {
+                const learningBtn = document.getElementById('learningBtn');
+                const learningCloseBtn = document.getElementById('learningCloseBtn');
+                const learningCenter = document.getElementById('learningCenter');
+                const mainContent = document.querySelector('.main-content');
+
+                if (learningBtn) {
+                    learningBtn.addEventListener('click', function() {
+                        if (learningCenter && mainContent) {
+                            mainContent.style.display = 'none';
+                            learningCenter.style.display = 'block';
+                            showNotification('Learning Center opened');
+                        }
+                    });
+                }
+
+                if (learningCloseBtn) {
+                    learningCloseBtn.addEventListener('click', function() {
+                        if (learningCenter && mainContent) {
+                            learningCenter.style.display = 'none';
+                            mainContent.style.display = 'block';
+                            showNotification('Learning Center closed');
+                        }
+                    });
+                }
+                
+                console.log('Learning center initialized successfully');
+            } catch (error) {
+                console.error('Learning center initialization failed:', error);
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            try {
+                if (!notification) return;
+                
+                notification.textContent = message;
+                notification.className = `notification ${type}`;
+                notification.classList.add('visible');
+                
+                setTimeout(() => {
+                    notification.classList.remove('visible');
+                }, 3000);
+            } catch (error) {
+                console.error('Notification error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
